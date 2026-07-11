@@ -1,12 +1,13 @@
-"""LexShield SDK — Shield entry point (stub)."""
+"""LexShield SDK — Shield entry point."""
 
 from __future__ import annotations
 
+import asyncio
 import contextvars
 import functools
 import inspect
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 
@@ -14,6 +15,7 @@ import ulid
 import yaml
 
 from lexshield.challenges.store import ChallengeStore
+from lexshield.classifiers.llm import LLMClassifier
 from lexshield.classifiers.pipeline import ClassifierPipeline
 from lexshield.errors import (
     LexShieldBlockedError,
@@ -23,15 +25,23 @@ from lexshield.errors import (
 from lexshield.models import (
     Caller,
     CallContext,
+    OutcomeType,
     ToolCallRequest,
     ToolRef,
-    Trace,
+    UpstreamConfig,
     Verdict,
     VerdictType,
 )
 from lexshield.policy.engine import PolicyEngine
 from lexshield.policy.loader import load_policy
-from lexshield.traces.sink import NDJSONTraceSink
+from lexshield.redaction import redact_arguments
+from lexshield.server.proxy import forward_upstream
+from lexshield.traces.sink import (
+    NDJSONTraceSink,
+    StdoutTraceSink,
+    TraceSink,
+    build_trace_payload,
+)
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -44,6 +54,8 @@ _session_environment: contextvars.ContextVar[str | None] = contextvars.ContextVa
 _session_tags: contextvars.ContextVar[dict[str, str] | None] = contextvars.ContextVar(
     "tags", default=None
 )
+
+_CHALLENGE_POLL_INTERVAL_SECONDS = 0.05
 
 
 class ShieldSession:
@@ -87,7 +99,13 @@ class Shield:
         name: str,
         policy_path: Path,
         rules_path: Path | None = None,
+        llm: LLMClassifier | None = None,
         trace_sink_path: Path | None = None,
+        trace_sinks: list[TraceSink] | None = None,
+        challenge_store_path: Path | None = None,
+        proxy_upstreams: dict[str, UpstreamConfig] | None = None,
+        fail_on_classifier_error: VerdictType = VerdictType.BLOCK,
+        redact_emails: str = "hash",
     ) -> None:
         self.shield_id = shield_id
         self.name = name
@@ -95,10 +113,27 @@ class Shield:
         self.compiled_policy = load_policy(policy_path)
         self.policy = self.compiled_policy.policy
         self.policy_engine = PolicyEngine(self.compiled_policy)
-        self.classifier_pipeline = ClassifierPipeline(rules_path=rules_path)
-        self.challenge_store = ChallengeStore()
-        self.trace_sink = (
-            NDJSONTraceSink(trace_sink_path) if trace_sink_path else None
+        self.classifier_pipeline = ClassifierPipeline(
+            rules_path=rules_path,
+            llm=llm,
+        )
+        self.challenge_store = ChallengeStore(
+            challenge_store_path or ".lexshield/challenges"
+        )
+        self.fail_on_classifier_error = fail_on_classifier_error
+        self.redact_emails = redact_emails
+        self.proxy_upstreams = proxy_upstreams or {}
+
+        if trace_sinks is not None:
+            self.trace_sinks: list[TraceSink] = trace_sinks
+        elif trace_sink_path is not None:
+            self.trace_sinks = [NDJSONTraceSink(trace_sink_path)]
+        else:
+            self.trace_sinks = []
+
+        self.trace_sink = next(
+            (sink for sink in self.trace_sinks if isinstance(sink, NDJSONTraceSink)),
+            self.trace_sinks[0] if self.trace_sinks else None,
         )
 
     @classmethod
@@ -118,10 +153,30 @@ class Shield:
         base_dir = config_path.parent
         policy_path = base_dir / shield_cfg.get("policy", "./policy.yaml")
         rules_path = None
+        llm_classifier: LLMClassifier | None = None
         for classifier in shield_cfg.get("classifiers", []):
-            if classifier.get("type") == "deterministic":
+            classifier_type = classifier.get("type")
+            if classifier_type == "deterministic":
                 rules_path = base_dir / classifier.get("path", "./rules.yaml")
-                break
+            elif classifier_type == "llm":
+                llm_classifier = LLMClassifier(
+                    model=classifier.get("model", "openai:gpt-4o-mini"),
+                    api_key_env=classifier.get("api_key_env", "OPENAI_API_KEY"),
+                    base_url_env=classifier.get("base_url_env", "OPENAI_BASE_URL"),
+                    timeout_ms=classifier.get("timeout_ms", 2000),
+                    optional=classifier.get("optional", True),
+                    redact=classifier.get("redact", True),
+                )
+
+        trace_sinks: list[TraceSink] = []
+        for sink in shield_cfg.get("sinks", []):
+            sink_type = sink.get("type")
+            if sink_type == "file":
+                trace_sinks.append(
+                    NDJSONTraceSink(base_dir / sink.get("path", "./traces.ndjson"))
+                )
+            elif sink_type == "stdout":
+                trace_sinks.append(StdoutTraceSink())
 
         trace_sink_path = None
         for sink in shield_cfg.get("sinks", []):
@@ -129,12 +184,33 @@ class Shield:
                 trace_sink_path = base_dir / sink.get("path", "./traces.ndjson")
                 break
 
+        challenges_cfg = shield_cfg.get("challenges", {})
+        challenge_store_path = base_dir / challenges_cfg.get(
+            "path", ".lexshield/challenges"
+        )
+
+        proxy_upstreams: dict[str, UpstreamConfig] = {}
+        proxy_cfg = shield_cfg.get("proxy", {})
+        if proxy_cfg.get("enabled"):
+            for tool, upstream in proxy_cfg.get("upstreams", {}).items():
+                proxy_upstreams[tool] = UpstreamConfig.model_validate(upstream)
+
+        fail_raw = shield_cfg.get("fail_on_classifier_error", "BLOCK")
+        fail_on_classifier_error = VerdictType(fail_raw)
+        redact_emails = shield_cfg.get("redact", {}).get("emails", "hash")
+
         return cls(
             shield_id=shield_cfg.get("id", "local"),
             name=shield_cfg.get("name", "local-shield"),
             policy_path=policy_path,
             rules_path=rules_path,
+            llm=llm_classifier,
             trace_sink_path=trace_sink_path,
+            trace_sinks=trace_sinks or None,
+            challenge_store_path=challenge_store_path,
+            proxy_upstreams=proxy_upstreams,
+            fail_on_classifier_error=fail_on_classifier_error,
+            redact_emails=redact_emails,
         )
 
     def session(
@@ -163,6 +239,7 @@ class Shield:
         """Evaluate a tool call and return a verdict (does not execute the tool)."""
         start = time.perf_counter()
         rid = request_id or str(ulid.new())
+        timestamp = datetime.now(timezone.utc).isoformat()
 
         caller_model = (
             caller
@@ -183,7 +260,7 @@ class Shield:
         request = ToolCallRequest(
             id=rid,
             shieldId=self.shield_id,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=timestamp,
             caller=caller_model,
             tool=ToolRef(name=tool),
             arguments=arguments or {},
@@ -198,25 +275,79 @@ class Shield:
                 "durationMs": (time.perf_counter() - start) * 1000,
             }
         )
-        if self.trace_sink is not None:
-            self.trace_sink.write(
-                Trace(
-                    id=rid,
-                    request=request,
-                    verdict=verdict,
-                )
+        verdict = self._attach_challenge(verdict, request_id=rid)
+
+        if self.trace_sinks:
+            trace_payload = build_trace_payload(
+                trace_id=rid,
+                shield_id=self.shield_id,
+                timestamp=timestamp,
+                request=request,
+                classifications=classifications,
+                verdict=verdict,
+                redact_emails=self.redact_emails,
             )
+            for sink in self.trace_sinks:
+                sink.write(trace_payload)
+
         return verdict
 
     def reload_policy(self) -> None:
         """Reload policy from disk and refresh the policy engine."""
-        self.compiled_policy = load_policy(self.policy_path)
-        self.policy = self.compiled_policy.policy
-        self.policy_engine = PolicyEngine(self.compiled_policy)
+        new_compiled = load_policy(self.policy_path)
+        new_engine = PolicyEngine(new_compiled)
+        self.compiled_policy = new_compiled
+        self.policy = new_compiled.policy
+        self.policy_engine = new_engine
 
     async def record_outcome(self, request_id: str, outcome: str) -> None:
-        """Record execution outcome for a prior request (stub)."""
-        _ = (request_id, outcome)
+        """Record execution outcome for a prior request."""
+        for sink in self.trace_sinks:
+            sink.update_outcome(request_id, outcome)
+
+    async def execute_upstream(
+        self,
+        *,
+        tool: str,
+        arguments: dict[str, Any] | None = None,
+        caller: dict[str, Any] | Caller | None = None,
+        context: dict[str, Any] | CallContext | None = None,
+        request_id: str | None = None,
+    ) -> tuple[Verdict, dict[str, Any] | None]:
+        """Evaluate and forward the request to a configured upstream when ALLOW."""
+        verdict = await self.evaluate(
+            tool=tool,
+            arguments=arguments,
+            caller=caller,
+            context=context,
+            request_id=request_id,
+        )
+        if verdict.decision != VerdictType.ALLOW:
+            return verdict, None
+
+        upstream = self.proxy_upstreams.get(tool)
+        if upstream is None:
+            return verdict, None
+
+        caller_model = (
+            caller
+            if isinstance(caller, Caller)
+            else Caller.model_validate(caller or {"id": "anonymous", "type": "agent"})
+        )
+        ctx = context if isinstance(context, CallContext) else CallContext.model_validate(
+            context or {}
+        )
+        request = ToolCallRequest(
+            id=verdict.request_id,
+            shieldId=self.shield_id,
+            caller=caller_model,
+            tool=ToolRef(name=tool),
+            arguments=arguments or {},
+            context=ctx,
+        )
+        result = await forward_upstream(request, upstream)
+        await self.record_outcome(verdict.request_id, OutcomeType.EXECUTED.value)
+        return verdict, result
 
     def guard(
         self,
@@ -237,7 +368,10 @@ class Shield:
                         tool=tool_name,
                         arguments=kwargs or {},
                     )
-                    self._raise_for_verdict(verdict, await_challenge=await_challenge)
+                    await self._raise_for_verdict(
+                        verdict,
+                        await_challenge=await_challenge,
+                    )
                     return await fn(*args, **kwargs)
 
                 return async_wrapper  # type: ignore[return-value]
@@ -258,21 +392,52 @@ class Shield:
         *,
         await_challenge: bool = False,
     ) -> Callable[[F], F]:
-        """Synchronous guard decorator (stub raises for async-only evaluate)."""
-        _ = (tool, await_challenge)
+        """Synchronous guard decorator using asyncio.run for evaluation."""
 
         def decorator(fn: F) -> F:
+            tool_name = tool or fn.__name__
+
             @functools.wraps(fn)
             def wrapper(*args: Any, **kwargs: Any) -> Any:
-                raise LexShieldConfigError(
-                    "guard_sync requires a running event loop; use async guard"
-                )
+                async def _run() -> Any:
+                    verdict = await self.evaluate(
+                        tool=tool_name,
+                        arguments=kwargs or {},
+                    )
+                    await self._raise_for_verdict(
+                        verdict,
+                        await_challenge=await_challenge,
+                    )
+                    return fn(*args, **kwargs)
+
+                return asyncio.run(_run())
 
             return wrapper  # type: ignore[return-value]
 
         return decorator
 
-    def _raise_for_verdict(
+    def _attach_challenge(self, verdict: Verdict, *, request_id: str) -> Verdict:
+        if verdict.decision not in (VerdictType.CHALLENGE, VerdictType.DEFER):
+            return verdict
+        if not verdict.matched_rule_id:
+            return verdict
+
+        rule = next(
+            (item for item in self.policy.rules if item.id == verdict.matched_rule_id),
+            None,
+        )
+        if rule is None or rule.challenge is None:
+            return verdict
+
+        challenge_id = self.challenge_store.create(
+            request_id=request_id,
+            reason=verdict.reason,
+            timeout_seconds=rule.challenge.timeout_seconds,
+            on_timeout=rule.challenge.on_timeout,
+        )
+        return verdict.model_copy(update={"challenge_id": challenge_id})
+
+    async def _raise_for_verdict(
         self,
         verdict: Verdict,
         *,
@@ -286,9 +451,60 @@ class Shield:
             )
         if verdict.decision == VerdictType.CHALLENGE:
             if await_challenge:
+                await self._await_challenge(verdict)
                 return
             raise LexShieldChallengeError(
                 verdict.reason,
                 verdict=verdict,
                 request_id=verdict.request_id,
             )
+
+    async def _await_challenge(self, verdict: Verdict) -> None:
+        challenge_id = verdict.challenge_id
+        if not challenge_id:
+            raise LexShieldChallengeError(
+                "Challenge required but no challenge id was created",
+                verdict=verdict,
+                request_id=verdict.request_id,
+            )
+
+        while True:
+            record = self.challenge_store.get(challenge_id)
+            if record is None:
+                raise LexShieldChallengeError(
+                    f"Challenge {challenge_id} not found",
+                    verdict=verdict,
+                    request_id=verdict.request_id,
+                )
+
+            status = record.get("status")
+            if status == "approved":
+                return
+            if status == "denied":
+                raise LexShieldBlockedError(
+                    "Challenge denied",
+                    verdict=verdict,
+                    request_id=verdict.request_id,
+                )
+
+            if self._challenge_timed_out(record):
+                on_timeout = VerdictType(record.get("onTimeout", VerdictType.BLOCK.value))
+                if on_timeout == VerdictType.ALLOW:
+                    return
+                raise LexShieldBlockedError(
+                    "Challenge timed out",
+                    verdict=verdict,
+                    request_id=verdict.request_id,
+                )
+
+            await asyncio.sleep(_CHALLENGE_POLL_INTERVAL_SECONDS)
+
+    @staticmethod
+    def _challenge_timed_out(record: dict[str, Any]) -> bool:
+        created_raw = record.get("createdAt")
+        if not created_raw:
+            return False
+        created = datetime.fromisoformat(created_raw)
+        timeout_seconds = int(record.get("timeoutSeconds", 3600))
+        deadline = created + timedelta(seconds=timeout_seconds)
+        return datetime.now(timezone.utc) >= deadline

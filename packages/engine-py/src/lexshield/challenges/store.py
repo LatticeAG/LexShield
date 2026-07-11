@@ -41,6 +41,13 @@ class ChallengeStore:
         path.write_text(json.dumps(record, indent=2), encoding="utf-8")
         return challenge_id
 
+    def get(self, challenge_id: str) -> dict[str, Any] | None:
+        """Return a challenge record by id."""
+        path = self.base_path / f"{challenge_id}.json"
+        if not path.exists():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+
     def list_open(self) -> list[dict[str, Any]]:
         """List open challenges."""
         open_challenges: list[dict[str, Any]] = []

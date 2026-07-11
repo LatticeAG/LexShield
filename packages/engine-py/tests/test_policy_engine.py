@@ -113,7 +113,7 @@ def test_challenge_delete_prod(baseline_engine: PolicyEngine) -> None:
     assert verdict.decision == VerdictType.CHALLENGE
     assert verdict.matched_rule_id == "challenge-delete-prod"
     assert verdict.reason == "Destructive action in production requires approval"
-    assert verdict.challenge_id == "challenge-01JTEST"
+    assert verdict.challenge_id is None
 
 
 def test_priority_tie_break_by_rule_id() -> None:

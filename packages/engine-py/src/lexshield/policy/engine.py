@@ -49,9 +49,6 @@ class PolicyEngine:
 
         if matched_rule is not None:
             rule = matched_rule.rule
-            challenge_id = None
-            if rule.verdict == VerdictType.CHALLENGE:
-                challenge_id = f"challenge-{request_id}"
             return Verdict(
                 requestId=request_id,
                 decision=rule.verdict,
@@ -59,7 +56,6 @@ class PolicyEngine:
                 reason=rule.reason,
                 classifications=classifications,
                 durationMs=duration_ms,
-                challengeId=challenge_id,
                 policyVersion=self.policy.version,
             )
 
