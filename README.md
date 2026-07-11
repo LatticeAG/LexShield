@@ -104,6 +104,14 @@ Community copy-paste patterns for Vercel AI SDK, LangChain, and OpenAI Agents �
 ## Development
 
 ```bash
+make test         # pytest + pnpm test + golden parity
+make acceptance   # SPEC Appendix D checklist (scripts/acceptance_v01.py)
+make build        # TypeScript SDK (no publish)
+```
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for full setup.
+
+```bash
 # Python
 uv sync
 uv run pytest
@@ -117,6 +125,6 @@ pnpm test:golden
 uv run lexshield-check-packs
 ```
 
-CI runs all of the above on every push — see [.github/workflows/ci.yml](./.github/workflows/ci.yml).
+CI runs on every push — [.github/workflows/ci.yml](./.github/workflows/ci.yml). Tag `v*` triggers [.github/workflows/release.yml](./.github/workflows/release.yml) (build validation only, no publish).
 
 See [SPEC.md](./SPEC.md) for architecture, policy language, intent taxonomy, and v0.1 acceptance criteria.
