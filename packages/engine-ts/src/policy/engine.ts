@@ -28,7 +28,10 @@ function globMatch(pattern: string, value: string): boolean {
   return regex.test(value);
 }
 
-function matchingIntents(classifications: Classification[]): Set<string> {
+function matchingIntents(
+  classifications: Classification[],
+  alternativesMinConfidence = 0.4,
+): Set<string> {
   const intents = new Set<string>();
   const primary = classifications[0];
   if (!primary) {
@@ -37,10 +40,16 @@ function matchingIntents(classifications: Classification[]): Set<string> {
 
   intents.add(primary.intent);
   for (const alternative of primary.alternatives) {
-    intents.add(alternative.intent);
+    if (alternative.confidence >= alternativesMinConfidence) {
+      intents.add(alternative.intent);
+    }
   }
 
   return intents;
+}
+
+function alternativesMinConfidence(policy: Policy): number {
+  return policy.severity_threshold?.alternatives_min_confidence ?? 0.4;
 }
 
 function tagsMatch(
@@ -65,6 +74,7 @@ function ruleMatches(
   rule: PolicyRule,
   input: PolicyEvaluationInput,
   bindings: ExpressionBindings,
+  alternativesMinConfidence: number,
 ): boolean {
   const { request, classifications } = input;
   const primary = classifications[0];
@@ -79,7 +89,7 @@ function ruleMatches(
   }
 
   if (match.intents?.length) {
-    const intents = matchingIntents(classifications);
+    const intents = matchingIntents(classifications, alternativesMinConfidence);
     const matched = match.intents.some((intent) => intents.has(intent));
     if (!matched) {
       return false;
@@ -151,7 +161,10 @@ export function evaluatePolicy(
   const primary = input.classifications[0];
   const bindings = buildExpressionBindings(input.request, input.classifications);
   const sorted = sortRules(policy.rules);
-  const matchedRule = sorted.find((rule) => ruleMatches(rule, input, bindings));
+  const altMinConfidence = alternativesMinConfidence(policy);
+  const matchedRule = sorted.find((rule) =>
+    ruleMatches(rule, input, bindings, altMinConfidence),
+  );
 
   if (matchedRule) {
     return {

@@ -10,6 +10,28 @@ pip install lexshield          # PyPI when published
 uv sync && uv run lexshield --help
 ```
 
+## Global flags
+
+All config-aware subcommands accept `-c, --config PATH` (default `./lexshield.yaml`). Set it once before the subcommand or on the subcommand itself:
+
+```bash
+lexshield -c examples/python-block-exfil/lexshield.yaml evaluate --tool health_check --args '{}'
+lexshield evaluate --tool health_check --args '{}' -c ./lexshield.yaml
+```
+
+## Shell completion
+
+```bash
+# Bash — append to ~/.bashrc or source directly
+lexshield completion bash >> ~/.bash_completion.d/lexshield
+source ~/.bash_completion.d/lexshield
+
+# Or use Typer's built-in installer
+lexshield --install-completion bash
+```
+
+Supported shells: `bash`, `zsh`, `fish`.
+
 ## `lexshield init`
 
 Scaffold `lexshield.yaml`, `policy.yaml`, `rules.yaml`, and `.gitignore` entries.
@@ -50,14 +72,14 @@ uv run lexshield-check-packs
 
 ## `lexshield run`
 
-Start the local FastAPI server (evaluate, execute stub, traces, challenges).
+Start the local FastAPI server (`/evaluate`, `/execute`, `/traces`, `/challenges`).
 
 ```bash
 lexshield run
 lexshield run --host 127.0.0.1 --port 8787
 ```
 
-Requires `lexshield.yaml` in the working directory.
+Requires `lexshield.yaml` in the working directory (or pass `-c`).
 
 ## `lexshield evaluate`
 
@@ -70,11 +92,42 @@ lexshield evaluate --tool send_email \
   --json
 ```
 
+### Examples (`lexshield evaluate --help`)
+
+```bash
+# Allow health check
+lexshield evaluate --tool health_check --args '{}'
+
+# Block AWS key in email body (deterministic pattern)
+lexshield evaluate --tool send_email \
+  --args '{"to":"user@example.com","body":"AKIA0123456789012345"}' \
+  --json
+
+# Challenge destructive prod delete
+lexshield -c examples/python-challenge-delete/lexshield.yaml evaluate \
+  --tool delete_resource \
+  --args '{"resource_id":"db-primary-replica","reason":"cleanup"}' \
+  --environment production \
+  --json
+
+# Evaluate a full ToolCallRequest from stdin
+echo '{"tool":{"name":"health_check"},"arguments":{}}' \
+  | lexshield evaluate --stdin --json
+
+# Override policy paths for CI
+lexshield evaluate --tool health_check --args '{}' \
+  --policy packs/baseline-deny/policy.yaml \
+  --rules packs/baseline-deny/rules.yaml
+```
+
 | Flag | Description |
 |------|-------------|
 | `--tool` | Tool name (required unless `--stdin`) |
 | `--args` | JSON object of arguments (default `{}`) |
-| `--caller` | Caller id |
+| `--caller` | Caller id or JSON object |
+| `--caller-type` | Caller type when `--caller` is a plain id (default `agent`) |
+| `--environment`, `--env` | Sets `context.environment` |
+| `--tags` | Context tags as JSON object |
 | `--json` | Machine-readable verdict on stdout |
 | `--stdin` | Read full `ToolCallRequest` JSON from stdin |
 | `-c, --config` | Config path |
@@ -88,6 +141,7 @@ Query local NDJSON trace files configured in `lexshield.yaml`.
 
 ```bash
 lexshield traces list
+lexshield traces list --decision BLOCK --limit 10
 lexshield traces show <request-id>
 ```
 
@@ -108,8 +162,11 @@ Example flow:
 ```bash
 cd examples/python-challenge-delete
 uv run --project ../.. python main.py
-# note challenge_id from output
-lexshield challenge approve <challenge_id>
+# end-to-end demo: CHALLENGE → lexshield challenge approve → guarded execution
+
+# Or step-by-step after CHALLENGE:
+lexshield challenge approve <challenge_id> -c examples/python-challenge-delete
+uv run --project ../.. python main.py --approve-only
 ```
 
 ## `lexshield packs`
@@ -120,6 +177,13 @@ lexshield packs apply baseline-deny
 lexshield packs apply pii-guard --output policy.yaml --force
 ```
 
+## `lexshield completion`
+
+```bash
+lexshield completion bash
+lexshield completion zsh >> ~/.zfunc/_lexshield
+```
+
 ## `lexshield version`
 
 ```bash
@@ -127,10 +191,6 @@ lexshield version
 ```
 
 Prints CLI semver and git short SHA when available.
-
-## Global flags
-
-All subcommands accept `-c, --config PATH` where applicable (default `./lexshield.yaml`).
 
 ## CI usage
 

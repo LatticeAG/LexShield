@@ -20,7 +20,7 @@ export type OutcomeType = z.infer<typeof OutcomeTypeSchema>;
 export const ChallengeConfigSchema = z.object({
   channel: z.enum(['stdout', 'webhook', 'slack', 'dashboard']),
   timeoutSeconds: z.number().int().positive(),
-  onTimeout: z.enum(['BLOCK', 'ALLOW']),
+  onTimeout: z.enum(['BLOCK', 'ALLOW', 'DEFER']),
   reviewers: z.array(z.string()).optional(),
 });
 export type ChallengeConfig = z.infer<typeof ChallengeConfigSchema>;

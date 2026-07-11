@@ -1,0 +1,18 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: caller-id-match
+  name: Caller id match fixture
+  defaultVerdict: BLOCK
+  rules:
+  - id: allow-ci
+    name: Allow CI bot
+    priority: 100
+    match:
+      callers:
+      - ci-bot
+      tools:
+      - health_check
+      - ping
+    verdict: ALLOW
+    reason: CI bot health checks allowed

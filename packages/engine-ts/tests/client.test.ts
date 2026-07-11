@@ -4,8 +4,8 @@ import { LocalApiClient } from '../src/client.js';
 
 describe('LocalApiClient', () => {
   it('calls the local evaluate endpoint', async () => {
-    const fetchImpl = async (url: string, init?: RequestInit) => {
-      expect(url).toBe('http://127.0.0.1:8787/v1/shields/local/evaluate');
+    const fetchImpl = async (input: string | URL | Request, init?: RequestInit) => {
+      expect(String(input)).toBe('http://127.0.0.1:8787/v1/shields/local/evaluate');
       expect(init?.method).toBe('POST');
 
       const body = JSON.parse(String(init?.body));
@@ -32,7 +32,7 @@ describe('LocalApiClient', () => {
   });
 
   it('sends bearer token when configured', async () => {
-    const fetchImpl = async (_url: string, init?: RequestInit) => {
+    const fetchImpl = async (_input: string | URL | Request, init?: RequestInit) => {
       const headers = init?.headers as Record<string, string>;
       expect(headers.authorization).toBe('Bearer test-token');
 

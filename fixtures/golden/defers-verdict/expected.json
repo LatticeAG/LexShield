@@ -1,0 +1,6 @@
+{
+  "decision": "DEFER",
+  "reason": "Deferred for manual policy review",
+  "primaryIntent": "infra.mutate.resource",
+  "matchedRuleId": "defer-review"
+}

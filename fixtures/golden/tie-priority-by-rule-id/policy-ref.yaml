@@ -1,0 +1,23 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: tie-priority-by-rule-id
+  name: Tie priority by rule id
+  defaultVerdict: ALLOW
+  rules:
+  - id: aaa-block
+    name: AAA block
+    priority: 200
+    match:
+      tools:
+      - tie_tool
+    verdict: BLOCK
+    reason: Lower rule id wins on tie
+  - id: zzz-allow
+    name: ZZZ allow
+    priority: 200
+    match:
+      tools:
+      - tie_tool
+    verdict: ALLOW
+    reason: Higher id loses on tie

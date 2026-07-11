@@ -1,0 +1,16 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: expression-complex-and-or
+  name: Complex AND/OR expression
+  defaultVerdict: BLOCK
+  rules:
+  - id: block-complex-expr
+    name: Block complex expression match
+    priority: 250
+    match:
+      intents:
+      - comms.send.email
+      expression: (env == "production" || env == "staging") && args.to contains "@external.com"
+    verdict: BLOCK
+    reason: External email blocked in prod or staging

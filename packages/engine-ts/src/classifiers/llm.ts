@@ -32,8 +32,9 @@ export interface LLMClassifierOptions {
 }
 
 function normalizeModel(model: string): string {
-  if (model.includes(':')) {
-    return model.split(':', 1)[1]!;
+  const colon = model.indexOf(':');
+  if (colon >= 0) {
+    return model.slice(colon + 1);
   }
   return model;
 }
@@ -111,7 +112,7 @@ export class LLMClassifier {
       payload.tags = request.context.tags;
     }
 
-    return JSON.stringify(payload, Object.keys(payload).sort());
+    return JSON.stringify(payload);
   }
 
   private parseResponse(content: string): Classification | null {

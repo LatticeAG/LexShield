@@ -8,6 +8,41 @@ LexShield sits between an AI agent and its tool fleet, classifies the intent beh
 - **Publisher**: [LatticeAG](https://latticeag.com)
 - **Specification**: [SPEC.md](./SPEC.md)
 
+## Architecture
+
+```mermaid
+flowchart LR
+  Agent["Agent / LLM"]
+  Shield["LexShield engine"]
+  Classify["Classifiers\n(deterministic + optional LLM)"]
+  Policy["Policy YAML\n+ rules.yaml"]
+  Tools["Tool upstreams"]
+  Traces["Trace sinks\n(stdout / NDJSON)"]
+  Challenges["Challenge store\n(.lexshield/challenges)"]
+
+  Agent -->|"ToolCallRequest"| Shield
+  Shield --> Classify
+  Classify --> Policy
+  Policy -->|"ALLOW / BLOCK / CHALLENGE"| Shield
+  Shield -->|"ALLOW only"| Tools
+  Shield --> Traces
+  Shield --> Challenges
+```
+
+## Features (v0.1)
+
+| Area | Capability |
+|------|------------|
+| **Policy engine** | Default-deny YAML policies with priority rules, globs, tags, and safe expressions |
+| **Classification** | Deterministic tool maps + regex patterns; optional OpenAI-compatible LLM fallback |
+| **Verdicts** | `ALLOW`, `BLOCK`, `CHALLENGE`, `DEFER` with audit-friendly reasons |
+| **Python SDK** | `Shield.evaluate`, `@shield.guard`, `await_challenge`, trace sinks |
+| **TypeScript SDK** | `@latticeag/lexshield` with golden parity on deterministic paths |
+| **CLI** | `init`, `check`, `evaluate`, `run`, `traces`, `challenge`, `packs`, shell completion |
+| **Local API** | FastAPI on `127.0.0.1:8787` — evaluate, execute, traces, challenge resolve |
+| **Policy packs** | `baseline-deny`, `pii-guard`, `change-window` |
+| **Human approval** | File-based challenge queue + `lexshield challenge approve` |
+
 ## Quickstart (5 minutes, deterministic-only)
 
 No API key required. These steps were verified against this repository.
@@ -51,7 +86,7 @@ lexshield evaluate --tool health_check --args '{}' --json
 ```bash
 pnpm install
 pnpm --filter @latticeag/lexshield build
-cd examples/ts-evaluate && pnpm exec tsx index.ts
+pnpm example:ts-evaluate
 ```
 
 ### Challenge flow (human approval)
@@ -59,13 +94,26 @@ cd examples/ts-evaluate && pnpm exec tsx index.ts
 ```bash
 cd examples/python-challenge-delete
 uv run --project ../.. python main.py
-# prints challenge_id
-
-lexshield challenge approve <challenge_id>
-lexshield challenge list   # no open challenges
+# end-to-end: CHALLENGE → CLI approve → guarded delete succeeds
 ```
 
 See [examples/README.md](./examples/README.md) and [docs/cli.md](./docs/cli.md).
+
+## Acceptance command
+
+Run the v0.1 acceptance suite from the repository root (matches [SPEC Appendix D](./SPEC.md#appendix-d--v01-acceptance-checklist)):
+
+```bash
+uv sync && uv run pytest && uv run lexshield-check-packs \
+  && pnpm install && pnpm test && pnpm test:golden \
+  && pnpm example:ts-evaluate
+```
+
+Or use the Makefile shortcut when available:
+
+```bash
+make acceptance   # scripts/acceptance_v01.py
+```
 
 ## Documentation
 
@@ -84,7 +132,7 @@ See [examples/README.md](./examples/README.md) and [docs/cli.md](./docs/cli.md).
 | Example | Description |
 |---------|-------------|
 | [python-block-exfil](./examples/python-block-exfil/) | `BLOCK` on AWS key in `send_email` |
-| [python-challenge-delete](./examples/python-challenge-delete/) | `CHALLENGE` prod delete + CLI approve |
+| [python-challenge-delete](./examples/python-challenge-delete/) | `CHALLENGE` prod delete + CLI approve + execution |
 | [ts-evaluate](./examples/ts-evaluate/) | TypeScript `evaluate()` demo |
 
 ## Framework adapters (contrib)

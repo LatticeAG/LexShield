@@ -1,0 +1,13 @@
+[
+  {
+    "intent": "security.secret_exposure",
+    "confidence": 0.98,
+    "alternatives": [
+      {
+        "intent": "data.exfiltrate",
+        "confidence": 0.95
+      }
+    ],
+    "classifier": "deterministic:v1"
+  }
+]

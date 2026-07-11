@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -20,6 +21,14 @@ from lexshield_cli.config import resolve_config_path, resolve_policy_and_rules
 from lexshield_cli.context import config_option, resolve_command_config
 
 console = Console()
+
+
+def _run_evaluate(coro, *, json_output: bool) -> Verdict:
+    """Run evaluate; suppress challenge stdout noise when emitting --json."""
+    if not json_output:
+        return asyncio.run(coro)
+    with contextlib.redirect_stdout(sys.stderr):
+        return asyncio.run(coro)
 
 
 def _resolve_rules_path(config: Path) -> Path | None:
@@ -233,14 +242,15 @@ def evaluate(
             console.print(f"[red]Invalid stdin ToolCallRequest:[/red] {exc}")
             raise typer.Exit(code=1) from exc
 
-        verdict = asyncio.run(
+        verdict = _run_evaluate(
             shield.evaluate(
                 tool=request.tool.name,
                 arguments=request.arguments,
                 caller=request.caller,
                 context=request.context,
                 request_id=request.id,
-            )
+            ),
+            json_output=json_output,
         )
     elif tool is None:
         console.print("[red]Provide --tool or --stdin[/red]")
@@ -262,14 +272,15 @@ def evaluate(
             console.print(f"[red]{exc}[/red]")
             raise typer.Exit(code=1) from exc
 
-        verdict = asyncio.run(
+        verdict = _run_evaluate(
             _evaluate_request(
                 shield,
                 tool=tool,
                 arguments=arguments,
                 caller=caller_payload,
                 context=context_payload or None,
-            )
+            ),
+            json_output=json_output,
         )
 
     if json_output:

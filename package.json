@@ -14,7 +14,8 @@
     "test": "pnpm -r test",
     "test:golden": "pnpm --filter @latticeag/lexshield test:golden",
     "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "example:ts-evaluate": "pnpm --filter lexshield-example-ts-evaluate exec tsx index.ts"
   },
   "engines": {
     "node": ">=20"

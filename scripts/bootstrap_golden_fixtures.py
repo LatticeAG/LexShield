@@ -14,15 +14,27 @@ sys.path.insert(0, str(WORKSPACE / "packages" / "engine-py" / "tests"))
 
 from golden_runner import (  # noqa: E402
     GOLDEN_ROOT,
+    _classifications_for_request,
+    _load_policy_ref,
     load_golden_fixture,
     primary_intent,
     run_golden_fixture,
 )
+from lexshield.models import ToolCallRequest  # noqa: E402
 
 
-def write_expected(scenario: str) -> dict:
-    fixture = load_golden_fixture(scenario)
-    verdict = run_golden_fixture(fixture)
+def evaluate_scenario(scenario: str) -> dict:
+    scenario_dir = GOLDEN_ROOT / scenario
+    with (scenario_dir / "request.json").open(encoding="utf-8") as handle:
+        request_data = json.load(handle)
+    policy_engine, classifier = _load_policy_ref(scenario_dir)
+    request = ToolCallRequest.model_validate(request_data)
+    classifications = _classifications_for_request(
+        request,
+        classifier,
+        scenario_dir=scenario_dir,
+    )
+    verdict = policy_engine.evaluate(request, classifications)
     expected: dict = {
         "decision": verdict.decision.value,
         "reason": verdict.reason,
@@ -158,24 +170,16 @@ def main() -> None:
                     ],
                 },
             },
-            "rules-ref.yaml": {
-                "version": 1,
-                "tool_map": {"send_email": "comms.send.email"},
-                "patterns": [
-                    {
-                        "name": "aws_access_key",
-                        "match": {"any_arg_regex": "AKIA[0-9A-Z]{16}"},
-                        "intent": "security.secret_exposure",
-                        "confidence": 0.98,
-                    },
-                    {
-                        "name": "bulk_customer_export",
-                        "match": {"any_arg_regex": "(?i)export.*customer"},
-                        "intent": "data.exfiltrate",
-                        "confidence": 0.95,
-                    },
-                ],
-            },
+            "classifications-ref.json": [
+                {
+                    "intent": "security.secret_exposure",
+                    "confidence": 0.98,
+                    "alternatives": [
+                        {"intent": "data.exfiltrate", "confidence": 0.95}
+                    ],
+                    "classifier": "deterministic:v1",
+                }
+            ],
             "request.json": {
                 "id": "01JFIXTUREPRISECEXFIL01",
                 "shieldId": "local",
@@ -183,7 +187,7 @@ def main() -> None:
                 "caller": {"id": "agent-1", "type": "agent"},
                 "tool": {"name": "send_email"},
                 "arguments": {
-                    "body": "export customer list AKIAIOSFODNN7EXAMPLE",
+                    "body": "export customer list with secret material",
                 },
                 "context": {"environment": "staging"},
             },
@@ -1106,7 +1110,7 @@ def main() -> None:
         ensure_fixture(scenario, files)
         expected_path = GOLDEN_ROOT / scenario / "expected.json"
         if not expected_path.exists():
-            expected = write_expected(scenario)
+            expected = evaluate_scenario(scenario)
             expected_path.write_text(
                 json.dumps(expected, indent=2) + "\n",
                 encoding="utf-8",

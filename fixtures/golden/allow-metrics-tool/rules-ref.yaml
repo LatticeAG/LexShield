@@ -1,0 +1,4 @@
+version: 1
+tool_map:
+  emit_metrics: network.request.health
+  record_metric: network.request.health

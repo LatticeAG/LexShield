@@ -1,0 +1,3 @@
+version: 1
+tool_map:
+  grant_role: identity.permission.grant

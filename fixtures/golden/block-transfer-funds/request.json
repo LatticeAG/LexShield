@@ -1,0 +1,19 @@
+{
+  "id": "01JFIXTUREBLOCKXFERFUND01",
+  "shieldId": "local",
+  "timestamp": "2026-07-11T12:00:00.000Z",
+  "caller": {
+    "id": "agent-1",
+    "type": "agent"
+  },
+  "tool": {
+    "name": "transfer_funds"
+  },
+  "arguments": {
+    "amount": 5000,
+    "to_account": "vendor-42"
+  },
+  "context": {
+    "environment": "production"
+  }
+}

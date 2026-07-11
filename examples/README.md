@@ -48,24 +48,27 @@ cd examples/python-challenge-delete
 uv run --project ../.. python main.py
 ```
 
-Expected: a `CHALLENGE` message with a `challenge_id`. LexShield writes an open challenge record under `.lexshield/challenges/` automatically when the guard raises.
+Expected: `CHALLENGE` → CLI approve → `ALLOW after approval` with deleted resource payload.
 
-Approve the challenge (run from the example directory):
+Manual approve step (if you triggered CHALLENGE separately):
 
 ```bash
-lexshield challenge approve <challenge_id>
-lexshield challenge list    # should show no open challenges
+uv run --project ../.. python main.py --challenge-only
+lexshield challenge approve <challenge_id> -c examples/python-challenge-delete
+uv run --project ../.. python main.py
 ```
-
-The challenge file is updated in place with `status: approved`.
-
-> **Note:** v0.1 records the approval locally. Re-running the guarded tool still returns `CHALLENGE` unless you use `await_challenge=True` on the decorator (documented in [docs/sdk-python.md](../docs/sdk-python.md)). The approve step demonstrates the human-in-the-loop workflow and audit trail.
 
 ## TypeScript: evaluate-only
 
 ```bash
+pnpm example:ts-evaluate
+```
+
+Or from the example directory:
+
+```bash
 cd examples/ts-evaluate
-npx tsx index.ts
+pnpm exec tsx index.ts
 ```
 
 Expected: JSON verdicts for `health_check` (`ALLOW`) and `send_email` with a secret in the body (`BLOCK`).

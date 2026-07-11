@@ -1,0 +1,6 @@
+{
+  "decision": "ALLOW",
+  "reason": "CI bot health checks allowed",
+  "primaryIntent": "network.request.health",
+  "matchedRuleId": "allow-ci"
+}

@@ -1,0 +1,6 @@
+{
+  "decision": "CHALLENGE",
+  "reason": "Delete requires timed approval",
+  "primaryIntent": "infra.delete.resource",
+  "matchedRuleId": "challenge-defer-on-timeout"
+}

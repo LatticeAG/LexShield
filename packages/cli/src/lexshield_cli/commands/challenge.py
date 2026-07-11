@@ -10,21 +10,14 @@ from rich.table import Table
 
 from lexshield.challenges.store import ChallengeStore
 from lexshield_cli.config import resolve_challenges_path, resolve_config_path
+from lexshield_cli.context import config_option, resolve_command_config
 
 console = Console()
 
 
 def list_challenges(
-    config: Path = typer.Option(
-        Path("lexshield.yaml"),
-        "--config",
-        "-c",
-        help="Path to lexshield.yaml or config directory.",
-        exists=False,
-        file_okay=True,
-        dir_okay=True,
-        resolve_path=True,
-    ),
+    ctx: typer.Context,
+    config: Path | None = config_option(),
     directory: Path | None = typer.Option(
         None,
         "--dir",
@@ -33,7 +26,8 @@ def list_challenges(
     ),
 ) -> None:
     """List open challenges from the local store."""
-    config_path = resolve_config_path(config) if config.exists() else config
+    resolved = resolve_command_config(ctx, config)
+    config_path = resolve_config_path(resolved) if resolved.exists() else resolved
     store_path = resolve_challenges_path(config_path, challenges_dir=directory)
     store = ChallengeStore(store_path)
     challenges = store.list_open()
@@ -61,10 +55,12 @@ def _resolve_challenge(
     challenge_id: str,
     decision: str,
     *,
-    config: Path,
+    ctx: typer.Context,
+    config: Path | None,
     directory: Path | None,
 ) -> None:
-    config_path = resolve_config_path(config) if config.exists() else config
+    resolved = resolve_command_config(ctx, config)
+    config_path = resolve_config_path(resolved) if resolved.exists() else resolved
     store_path = resolve_challenges_path(config_path, challenges_dir=directory)
     store = ChallengeStore(store_path)
     record = store.resolve(challenge_id, decision=decision, actor="cli")
@@ -79,17 +75,9 @@ def _resolve_challenge(
 
 
 def approve_challenge(
+    ctx: typer.Context,
     challenge_id: str = typer.Argument(help="Challenge id to approve."),
-    config: Path = typer.Option(
-        Path("lexshield.yaml"),
-        "--config",
-        "-c",
-        help="Path to lexshield.yaml or config directory.",
-        exists=False,
-        file_okay=True,
-        dir_okay=True,
-        resolve_path=True,
-    ),
+    config: Path | None = config_option(),
     directory: Path | None = typer.Option(
         None,
         "--dir",
@@ -98,21 +86,19 @@ def approve_challenge(
     ),
 ) -> None:
     """Approve a pending challenge."""
-    _resolve_challenge(challenge_id, "approve", config=config, directory=directory)
+    _resolve_challenge(
+        challenge_id,
+        "approve",
+        ctx=ctx,
+        config=config,
+        directory=directory,
+    )
 
 
 def deny_challenge(
+    ctx: typer.Context,
     challenge_id: str = typer.Argument(help="Challenge id to deny."),
-    config: Path = typer.Option(
-        Path("lexshield.yaml"),
-        "--config",
-        "-c",
-        help="Path to lexshield.yaml or config directory.",
-        exists=False,
-        file_okay=True,
-        dir_okay=True,
-        resolve_path=True,
-    ),
+    config: Path | None = config_option(),
     directory: Path | None = typer.Option(
         None,
         "--dir",
@@ -121,4 +107,10 @@ def deny_challenge(
     ),
 ) -> None:
     """Deny a pending challenge."""
-    _resolve_challenge(challenge_id, "deny", config=config, directory=directory)
+    _resolve_challenge(
+        challenge_id,
+        "deny",
+        ctx=ctx,
+        config=config,
+        directory=directory,
+    )

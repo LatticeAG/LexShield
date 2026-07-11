@@ -56,6 +56,7 @@ export {
 
 export {
   BUILTIN_INTENT_SEVERITY,
+  BUILTIN_INTENTS,
   BUILTIN_TAXONOMY_VERSION,
   builtinTaxonomy,
   getIntentSeverity,
@@ -63,8 +64,23 @@ export {
   type Taxonomy,
 } from './taxonomy.js';
 
-export { NDJSONTraceSink } from './traces/sink.js';
+export {
+  buildTracePayload,
+  CompositeTraceSink,
+  HttpTraceSink,
+  NDJSONTraceSink,
+  OtlpTraceSink,
+  StdoutTraceSink,
+  type TraceSink,
+} from './traces/sink.js';
+export { ChallengeNotifier, type ChallengeNotifierOptions } from './challenges/notifier.js';
 export { ChallengeStore, type ChallengeRecord } from './challenges/store.js';
+export {
+  LLMCircuitBreaker,
+  getDefaultCircuitBreaker,
+  resetDefaultCircuitBreaker,
+  type LLMCircuitBreakerOptions,
+} from './classifiers/circuit-breaker.js';
 
 export {
   CallerSchema,

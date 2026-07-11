@@ -18,7 +18,6 @@ import { evaluatePolicy } from './policy/engine.js';
 import { loadPolicyFromFile, loadPolicyFromFileSync, resolvePolicyPath } from './policy/loader.js';
 import {
   buildTracePayload,
-  CompositeTraceSink,
   HttpTraceSink,
   NDJSONTraceSink,
   OtlpTraceSink,
@@ -225,10 +224,7 @@ export class Shield {
     this.challengeNotifier = options.challengeNotifier ?? null;
 
     if (options.traceSinks) {
-      this.traceSinks =
-        options.traceSinks.length > 1
-          ? [new CompositeTraceSink(options.traceSinks)]
-          : [...options.traceSinks];
+      this.traceSinks = [...options.traceSinks];
     } else if (options.traceSink) {
       this.traceSinks = [options.traceSink];
     } else {

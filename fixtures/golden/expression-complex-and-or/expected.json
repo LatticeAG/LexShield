@@ -1,0 +1,6 @@
+{
+  "decision": "BLOCK",
+  "reason": "External email blocked in prod or staging",
+  "primaryIntent": "comms.send.email",
+  "matchedRuleId": "block-complex-expr"
+}

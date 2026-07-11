@@ -7,22 +7,29 @@ Demonstrates LexShield **CHALLENGE** for a destructive infra action in productio
 1. Agent calls `delete_resource` in `environment=production`.
 2. Classifier maps tool → `infra.delete.resource`.
 3. Rule `challenge-delete-prod` returns **CHALLENGE** and writes a record to `.lexshield/challenges/`.
-4. Approve via CLI; use `await_challenge=True` on the guard to wait for approval.
+4. Approve via CLI; the demo re-runs with `await_challenge=True` and executes after approval.
 
-## Run
+## Run (end-to-end)
 
 ```bash
 cd examples/python-challenge-delete
 uv run --project ../.. python main.py
 ```
 
-Expected: `CHALLENGE` with a `challenge_id`.
+Expected flow:
 
-Approve:
+1. `CHALLENGE while awaiting approval: challenge_id=...`
+2. `lexshield challenge approve <challenge_id> -c .` (invoked automatically by the demo)
+3. `ALLOW after approval: {'status': 'deleted', ...}`
+
+## Run (step-by-step)
+
+Trigger CHALLENGE only, then run the full demo after manual approval:
 
 ```bash
-lexshield challenge approve <challenge_id>
-lexshield challenge list
+uv run --project ../.. python main.py --challenge-only
+lexshield challenge approve <challenge_id> -c examples/python-challenge-delete
+uv run --project ../.. python main.py
 ```
 
 ## Related

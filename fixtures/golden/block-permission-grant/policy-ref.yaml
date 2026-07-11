@@ -1,0 +1,15 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: block-permission-grant
+  name: Block permission grants
+  defaultVerdict: BLOCK
+  rules:
+  - id: block-permission-grant
+    name: Block permission grant
+    priority: 250
+    match:
+      intents:
+      - identity.permission.grant
+    verdict: BLOCK
+    reason: Permission grants require human approval

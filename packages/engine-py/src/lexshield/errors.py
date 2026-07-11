@@ -46,7 +46,7 @@ def redact_verdict_for_agent(verdict: Verdict, *, expose_rule_ids: bool) -> Verd
     """Return a verdict copy safe for agent-facing surfaces."""
     if expose_rule_ids or verdict.matched_rule_id is None:
         return verdict
-    return verdict.model_copy(update={"matchedRuleId": None})
+    return verdict.model_copy(update={"matched_rule_id": None})
 
 
 def agent_facing_error(

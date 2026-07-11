@@ -1,0 +1,6 @@
+{
+  "decision": "BLOCK",
+  "reason": "Fund transfers are blocked by policy",
+  "primaryIntent": "finance.transfer.create",
+  "matchedRuleId": "block-transfer-funds"
+}

@@ -1,0 +1,3 @@
+version: 1
+tool_map:
+  write_record: data.write.record

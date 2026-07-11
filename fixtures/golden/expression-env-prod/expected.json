@@ -1,0 +1,6 @@
+{
+  "decision": "CHALLENGE",
+  "reason": "Production mutations require approval",
+  "primaryIntent": "infra.mutate.resource",
+  "matchedRuleId": "expr-prod-challenge"
+}

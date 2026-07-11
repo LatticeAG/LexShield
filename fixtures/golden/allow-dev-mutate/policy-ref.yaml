@@ -1,0 +1,17 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: allow-dev-mutate
+  name: Allow dev mutations
+  defaultVerdict: BLOCK
+  rules:
+  - id: allow-dev-mutate
+    name: Allow dev environment mutations
+    priority: 150
+    match:
+      environments:
+      - development
+      intents:
+      - infra.mutate.resource
+    verdict: ALLOW
+    reason: Development mutations are allowed

@@ -69,6 +69,19 @@ pytest packages/engine-py/tests/test_golden.py
 pnpm --filter @latticeag/lexshield test:golden
 ```
 
+**Current count: 60 scenarios** (SPEC §9B.9 matrix rows + extended regression set).
+
+## Optional fixture files
+
+| File | When to use |
+|------|-------------|
+| `rules-ref.yaml` | Override pack `rules.yaml` (tool_map, patterns) for the scenario |
+| `classifications-ref.json` | Force classifier output when deterministic rules cannot express alternatives or multi-intent cases (e.g. `alternatives-intent-match`) |
+
+### Not covered in golden CI
+
+- **`prior-calls-no-cache`** — `ClassifierPipeline` disables fingerprint cache when `context.priorCalls` is set; golden runners evaluate `PolicyEngine` directly with deterministic classification only, so prior-call cache behavior is validated in unit tests (`test_pipeline.py`), not golden fixtures.
+
 ## Adding scenarios
 
 1. Name the directory `{verdict}-{behavior}` (e.g. `block-secret-exposure`, `allow-health`).
@@ -76,4 +89,4 @@ pnpm --filter @latticeag/lexshield test:golden
 3. Add `request.json` and `expected.json`.
 4. Ensure the scenario is covered by a must-have security regression (SPEC §27.2) when applicable.
 
-Target: **≥ 50 scenarios** for v0.1 tag; these two fixtures bootstrap the suite.
+Target: **≥ 50 scenarios** for v0.1 tag; the suite currently has **60** scenarios including all §9B.9 matrix rows.

@@ -1,0 +1,6 @@
+{
+  "decision": "ALLOW",
+  "reason": "Billing namespace tools are allowed",
+  "primaryIntent": "unknown.unclassified",
+  "matchedRuleId": "allow-billing-namespace"
+}

@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { ClassifierPipeline, UNKNOWN_INTENT } from '../src/classifiers/pipeline.js';
 import { evaluatePolicy } from '../src/policy/engine.js';
 import { loadPolicyFromData, loadPolicyFromFile } from '../src/policy/loader.js';
-import { ToolCallRequestSchema, type Policy, type ToolCallRequest } from '../src/types.js';
+import { ToolCallRequestSchema, ClassificationSchema, type Policy, type ToolCallRequest, type Classification } from '../src/types.js';
 
 const workspaceRoot = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
 const fixturesRoot = join(workspaceRoot, 'fixtures', 'golden');
@@ -90,7 +90,17 @@ async function loadPolicyRef(scenarioDir: string): Promise<{
 async function classificationsForRequest(
   request: ToolCallRequest,
   rulesPath: string | null,
-) {
+  scenarioDir: string,
+): Promise<Classification[]> {
+  const classificationsRefPath = join(scenarioDir, 'classifications-ref.json');
+  try {
+    const raw = await readFile(classificationsRefPath, 'utf8');
+    const parsed = JSON.parse(raw) as unknown[];
+    return parsed.map((item) => ClassificationSchema.parse(item));
+  } catch {
+    // no classifications-ref.json
+  }
+
   const pipeline = rulesPath
     ? await ClassifierPipeline.fromRulesPath(rulesPath, { llmEnabled: false })
     : new ClassifierPipeline({ llmEnabled: false });
@@ -109,7 +119,7 @@ async function loadGoldenScenario(scenario: string) {
   delete expected.strict;
 
   const { policy, rulesPath } = await loadPolicyRef(scenarioDir);
-  const classifications = await classificationsForRequest(request, rulesPath);
+  const classifications = await classificationsForRequest(request, rulesPath, scenarioDir);
   const verdict = evaluatePolicy(policy, { request, classifications });
 
   return {

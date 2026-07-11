@@ -8,6 +8,7 @@ import {
   clearClassificationCache,
   mergeClassifications,
 } from '../src/classifiers/pipeline.js';
+import { resetDefaultCircuitBreaker } from '../src/classifiers/circuit-breaker.js';
 import { getIntentSeverity } from '../src/taxonomy.js';
 import type { Classification, ToolCallRequest } from '../src/types.js';
 
@@ -89,6 +90,7 @@ describe('mergeClassifications', () => {
 describe('ClassifierPipeline', () => {
   beforeEach(() => {
     clearClassificationCache();
+    resetDefaultCircuitBreaker();
   });
 
   it('classifies tool_map intents', async () => {

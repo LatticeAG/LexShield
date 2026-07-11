@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.table import Table
 
 from lexshield_cli.config import resolve_config_path, resolve_trace_path
+from lexshield_cli.context import config_option, resolve_command_config
 
 console = Console()
 
@@ -47,18 +48,10 @@ def _tool_name(event: dict) -> str:
 
 
 def list_traces(
+    ctx: typer.Context,
     decision: str | None = typer.Option(None, "--decision", help="Filter by verdict decision."),
     limit: int = typer.Option(50, "--limit", help="Maximum traces to show."),
-    config: Path = typer.Option(
-        Path("lexshield.yaml"),
-        "--config",
-        "-c",
-        help="Path to lexshield.yaml or config directory.",
-        exists=False,
-        file_okay=True,
-        dir_okay=True,
-        resolve_path=True,
-    ),
+    config: Path | None = config_option(),
     trace_file: Path | None = typer.Option(
         None,
         "--trace-file",
@@ -67,7 +60,8 @@ def list_traces(
     ),
 ) -> None:
     """List traces from local NDJSON sink."""
-    config_path = resolve_config_path(config) if config.exists() else config
+    resolved = resolve_command_config(ctx, config)
+    config_path = resolve_config_path(resolved) if resolved.exists() else resolved
     path = resolve_trace_path(config_path, trace_file=trace_file)
 
     if not path.exists():
@@ -102,17 +96,9 @@ def list_traces(
 
 
 def show_trace(
+    ctx: typer.Context,
     request_id: str = typer.Argument(help="Trace / request id to display."),
-    config: Path = typer.Option(
-        Path("lexshield.yaml"),
-        "--config",
-        "-c",
-        help="Path to lexshield.yaml or config directory.",
-        exists=False,
-        file_okay=True,
-        dir_okay=True,
-        resolve_path=True,
-    ),
+    config: Path | None = config_option(),
     trace_file: Path | None = typer.Option(
         None,
         "--trace-file",
@@ -121,7 +107,8 @@ def show_trace(
     ),
 ) -> None:
     """Show a single trace event."""
-    config_path = resolve_config_path(config) if config.exists() else config
+    resolved = resolve_command_config(ctx, config)
+    config_path = resolve_config_path(resolved) if resolved.exists() else resolved
     path = resolve_trace_path(config_path, trace_file=trace_file)
 
     if not path.exists():

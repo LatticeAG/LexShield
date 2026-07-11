@@ -1,0 +1,6 @@
+{
+  "decision": "CHALLENGE",
+  "reason": "Provisioning requires webhook approval",
+  "primaryIntent": "infra.provision.resource",
+  "matchedRuleId": "challenge-webhook"
+}

@@ -1,0 +1,25 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: tags-multi-key-match
+  name: Multi-key tag match
+  defaultVerdict: BLOCK
+  rules:
+  - id: challenge-sensitive-export
+    name: Challenge sensitive export
+    priority: 220
+    match:
+      intents:
+      - data.exfiltrate
+      tags:
+        data_class:
+        - pii
+        - financial
+        export_scope:
+        - external
+    verdict: CHALLENGE
+    reason: Sensitive external export requires approval
+    challenge:
+      channel: stdout
+      timeoutSeconds: 3600
+      onTimeout: BLOCK

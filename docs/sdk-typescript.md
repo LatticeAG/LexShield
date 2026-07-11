@@ -142,8 +142,7 @@ The Python `lexshield run` server exposes challenge list/resolve endpoints. Type
 ## Examples
 
 ```bash
-cd examples/ts-evaluate
-pnpm exec tsx index.ts
+pnpm example:ts-evaluate
 ```
 
 See [examples/ts-evaluate](../examples/ts-evaluate/index.ts) for evaluate-only usage with local policy files.

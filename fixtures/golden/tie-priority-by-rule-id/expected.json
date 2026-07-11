@@ -1,0 +1,6 @@
+{
+  "decision": "BLOCK",
+  "reason": "Lower rule id wins on tie",
+  "primaryIntent": "unknown.unclassified",
+  "matchedRuleId": "aaa-block"
+}

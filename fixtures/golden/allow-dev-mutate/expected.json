@@ -1,0 +1,6 @@
+{
+  "decision": "ALLOW",
+  "reason": "Development mutations are allowed",
+  "primaryIntent": "infra.mutate.resource",
+  "matchedRuleId": "allow-dev-mutate"
+}
