@@ -1,0 +1,22 @@
+{
+  "name": "lexshield-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "LexShield — open-source agent intent router and policy firewall",
+  "license": "MIT",
+  "author": "LatticeAG",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/latticeag/lexshield.git"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

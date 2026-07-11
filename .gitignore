@@ -1,0 +1,67 @@
+# LexShield local state
+.lexshield/
+traces.ndjson
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+pip-wheel-metadata/
+*.manifest
+*.spec
+
+# uv
+.uv/
+uv.lock
+
+# Node / pnpm
+node_modules/
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tsbuildinfo
+
+# Build outputs
+dist/
+out/
+lib/
+coverage/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Test / tooling artifacts
+.hypothesis/
+.pytest_cache/
+vitest.config.ts.timestamp-*

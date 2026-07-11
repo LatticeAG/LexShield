@@ -1,0 +1,26 @@
+[project]
+name = "lexshield-cli"
+version = "0.1.0"
+description = "LexShield CLI — agent intent router and policy firewall"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [{ name = "LatticeAG" }]
+dependencies = [
+    "lexshield",
+    "typer>=0.12",
+    "rich>=13",
+    "uvicorn>=0.30",
+]
+
+[project.scripts]
+lexshield = "lexshield_cli.main:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lexshield_cli"]
+
+[tool.uv.sources]
+lexshield = { workspace = true }
