@@ -1,10 +1,12 @@
 # LexShield — Product & Engineering Specification
 
-> **Status**: Planning (v0.2 — expanded)  
+> **Status**: Planning (v0.3 — OSS-first build)  
 > **Owner**: LatticeAG  
-> **License (OSS)**: MIT  
-> **SaaS**: LexShield Cloud (invite-only), hosted by LatticeAG  
-> **This document is the source of truth for build decisions until replaced by ADRs.**
+> **License**: MIT  
+> **First build**: **Open-source only** (CLI + SDKs + engine). No SaaS.  
+> **Deferred**: LexShield Cloud (hosted control plane) — post-MVP, only after OSS is solid.  
+> **This document is the source of truth for build decisions until replaced by ADRs.**  
+> **Build readiness**: Yes for OSS MVP — see [§35 Build Readiness](#35-build-readiness).
 
 ---
 
@@ -26,7 +28,7 @@
 14. [SDKs (Python & TypeScript)](#14-sdks-python--typescript)
 15. [CLI Surface](#15-cli-surface)
 16. [Local API & Proxy](#16-local-api--proxy)
-17. [LexShield Cloud](#17-lexshield-cloud)
+17. [Deferred: LexShield Cloud](#17-deferred-lexshield-cloud)
 18. [Data Model](#18-data-model)
 19. [Configuration Schema](#19-configuration-schema)
 20. [Architecture & Request Pipeline](#20-architecture--request-pipeline)
@@ -39,12 +41,12 @@
 27. [Repository & Monorepo Layout](#27-repository--monorepo-layout)
 28. [Tech Stack Recommendations](#28-tech-stack-recommendations)
 29. [Developer Experience & Documentation](#29-developer-experience--documentation)
-30. [Dashboard UX (Cloud)](#30-dashboard-ux-cloud)
-31. [Pricing, Packaging & Go-to-Market](#31-pricing-packaging--go-to-market)
-32. [MVP Milestones (6-Day Build)](#32-mvp-milestones-6-day-build)
-33. [Post-MVP Roadmap](#33-post-mvp-roadmap)
-34. [Open Questions (with Recommendations)](#34-open-questions-with-recommendations)
-35. [Decision Log](#35-decision-log)
+30. [Go-to-Market (OSS)](#30-go-to-market-oss)
+31. [MVP Milestones (OSS First Build)](#31-mvp-milestones-oss-first-build)
+32. [Post-MVP Roadmap](#32-post-mvp-roadmap)
+33. [Open Questions (with Recommendations)](#33-open-questions-with-recommendations)
+34. [Decision Log](#34-decision-log)
+35. [Build Readiness](#35-build-readiness)
 36. [Appendix A — Example Policy Packs](#appendix-a--example-policy-packs)
 37. [Appendix B — Built-in Intent Catalog (MVP)](#appendix-b--built-in-intent-catalog-mvp)
 38. [Appendix C — Trace Event Schema](#appendix-c--trace-event-schema)
@@ -57,17 +59,19 @@
 
 Existing auth layers (RBAC, OAuth scopes, API keys) authorize *who* can call a tool. They do not understand *why* an agent is calling it in natural-language context. LexShield closes that gap.
 
-**Recommendation — product shape (confident):**
+**Recommendation — product shape for first build (locked):**
 
-| Layer | Form | Why |
-|-------|------|-----|
-| Core engine | Open-source library + CLI (MIT) | Trust, adoption, auditability, community |
-| SDKs | Python first, TypeScript second | Matches agent ecosystem gravity |
-| Hosted control plane | Invite-only SaaS (LexShield Cloud) | Policy distribution, retention, multi-team, alerts |
-| Hosting | Cloudflare Workers + Durable Objects + D1/R2 | Edge latency, low ops, fits LatticeAG stack |
+| Layer | Form | First build? |
+|-------|------|--------------|
+| Core engine | Open-source library + CLI (MIT) | **Yes** |
+| SDKs | Python first, TypeScript second | **Yes** |
+| Policy packs + examples | Shipped in repo | **Yes** |
+| Hosted SaaS (LexShield Cloud) | Future control plane | **No — deferred** |
 
-**One-line positioning:**  
-*"The policy firewall for agent tool calls — open source for transparency, cloud for control."*
+**One-line positioning (OSS launch):**  
+*"The open-source policy firewall for agent tool calls."*
+
+Cloud / paid control plane is a **later** option if users ask for hosted policy distribution, long-term trace retention, and multi-team controls. It is **out of scope for the first build**.
 
 ---
 
@@ -126,10 +130,10 @@ Tool names are necessary but not sufficient (`http_request` can mean health-chec
 
 ```
 Local CLI eval → SDK wrap in one tool → Policy in repo + CI check
-  → Proxy for multi-language agents → Cloud for policy publish + traces
+  → Proxy for multi-language agents → (later) optional Cloud
 ```
 
-Do **not** require Cloud signup for first value. Local-first is non-negotiable for OSS trust.
+First value is fully offline. No account, no hosted dependency.
 
 ---
 
@@ -148,9 +152,9 @@ Do **not** require Cloud signup for first value. Local-first is non-negotiable f
 3. **Explainable verdicts** — every decision includes matched rule id, reason string, and classifications.
 4. **Fast path first** — deterministic classifiers before LLM; never require LLM for ALLOW of known-safe patterns if policy author opts in.
 5. **Fail closed on uncertainty (configurable)** — when classifiers disagree or confidence is low, default to `BLOCK` or `CHALLENGE`, not `ALLOW`.
-6. **OSS is the product; Cloud is the control plane** — engine parity: Cloud must not be required for correctness.
+6. **OSS is the product** — the first build is MIT open source only; no hosted dependency for correctness or usefulness.
 7. **No credential custody** — LexShield does not store tool secrets.
-8. **Policy as code** — policies live in git; Cloud versions them; CI validates them.
+8. **Policy as code** — policies live in git; CI validates them with `lexshield check`.
 9. **Honest limits** — document that classification is probabilistic; LexShield reduces risk, does not eliminate adversarial risk.
 
 ### 4.3 Brand / Naming
@@ -159,7 +163,7 @@ Do **not** require Cloud signup for first value. Local-first is non-negotiable f
 |------|-----|
 | LexShield | Product, CLI (`lexshield`), Python package `lexshield` |
 | `@latticeag/lexshield` | TypeScript package |
-| LexShield Cloud | Hosted SaaS |
+| LexShield Cloud | **Deferred** hosted SaaS — not in first build |
 | LatticeAG | Company / publisher |
 
 **Recommendation**: Keep CLI binary name `lexshield` (no hyphens). Config file `lexshield.yaml`. Policy file default `policy.yaml`.
@@ -174,7 +178,7 @@ Do **not** require Cloud signup for first value. Local-first is non-negotiable f
 | Agent frameworks’ callbacks | LangChain callbacks, custom middleware | Ad hoc; no policy language or audit product |
 | API gateways | Kong, Cloudflare API Shield | No NL intent; not agent-context aware |
 | Identity / IAM | OAuth scopes, Cedar, OPA | Powerful policy, weak agent-intent signal |
-| Emerging agent security | Guardrails.ai, Portkey, custom wrappers | Overlap possible; LexShield differentiates on **intent taxonomy + policy firewall + OSS/Cloud split** |
+| Emerging agent security | Guardrails.ai, Portkey, custom wrappers | Overlap possible; LexShield differentiates on **intent taxonomy + policy firewall + local-first OSS** |
 
 **Recommendation**: Position against “OPA for agent tool calls” + “intent classification layer,” not against general LLM safety.
 
@@ -183,7 +187,7 @@ Do **not** require Cloud signup for first value. Local-first is non-negotiable f
 1. First-class **intent** object in the policy model  
 2. Multi-stage classifier pipeline with deterministic primacy  
 3. `CHALLENGE` / `DEFER` as first-class verdicts (HITL)  
-4. OSS engine with identical evaluation semantics in Cloud  
+4. Fully local, auditable OSS engine with policy-as-code DX  
 
 ---
 
@@ -199,7 +203,7 @@ Do **not** require Cloud signup for first value. Local-first is non-negotiable f
 | **Verdict** | `ALLOW` \| `BLOCK` \| `CHALLENGE` \| `DEFER` with reasoning. |
 | **Trace** | Immutable record of request → classification → verdict → outcome. |
 | **Classifier** | Component that maps signals → ranked intents + confidence. |
-| **Sink** | Trace destination (stdout, file, OTLP, HTTP, SaaS). |
+| **Sink** | Trace destination (stdout, file, OTLP, HTTP). |
 | **Caller** | Authenticated identity of the agent/user/service making the call (asserted by the host app). |
 | **Challenge** | Human approval gate before execution. |
 | **Defer** | Async review path; execution withheld until resolved (or timed out → fail closed). |
@@ -210,15 +214,14 @@ Do **not** require Cloud signup for first value. Local-first is non-negotiable f
 
 ## 7. Success Metrics
 
-### 7.1 Product / Business (Cloud + OSS)
+### 7.1 Product / OSS
 
 | Metric | MVP target | Notes |
 |--------|------------|-------|
 | Time-to-first-eval | < 5 minutes from `pip install` / `npm i` | Include sample policy |
-| OSS weekly evals (telemetry opt-in) | Track after M4 | Anonymous, off by default |
-| Cloud waitlist → activated orgs | Conversion tracked | Invite-only |
-| False-block rate (customer-reported) | Qualitative in MVP | Instrument later |
-| p99 evaluate latency (deterministic path) | < 5 ms local | See perf section |
+| `lexshield check` in CI | Documented GitHub Action example | Exit non-zero on bad policy |
+| Golden fixture count | ≥ 50 scenarios | Py/TS parity |
+| Stars / design-partner installs | Qualitative early | Track manually |
 
 ### 7.2 Engineering Quality
 
@@ -238,35 +241,38 @@ Do **not** require Cloud signup for first value. Local-first is non-negotiable f
 
 ## 8. Scope: Goals, Non-Goals, and Phasing
 
-### 8.1 MVP Goals (in-scope)
+### 8.1 MVP Goals (in-scope) — OSS only
 
 - YAML/JSON policy engine with rule priority, default-deny, CEL-lite expressions
 - Deterministic classifier + LLM classifier (OpenAI-compatible)
 - Python SDK (`@shield.guard`, `evaluate`)
 - Local HTTP API + proxy execute mode
-- CLI: `init`, `check`, `run`, `evaluate`, `traces`
-- NDJSON + stdout sinks; OpenTelemetry hooks (basic)
+- CLI: `init`, `check`, `run`, `evaluate`, `traces`, `challenge`
+- NDJSON + stdout + optional OTLP/HTTP sinks
 - TypeScript SDK parity for `evaluate` + config load
-- Cloud scaffold: orgs, policy CRUD/publish, trace ingest, invite gate
 - Built-in intent catalog (~25–40 intents) + 2–3 policy packs
+- Docs: quickstart, policy guide, security model, examples
+- Local challenge queue (CLI approve/deny)
 
-### 8.2 Explicit Non-Goals (MVP)
+### 8.2 Explicit Non-Goals (first build)
 
+- **Any SaaS / LexShield Cloud** (dashboard, hosted policies, invite flow, billing)
 - Generic API gateway features (LB, primary rate limiting product, request rewrite)
 - Being an agent / planner / workflow engine
 - Secrets management / vault
 - Replacing HITL for high-stakes actions (we formalize it)
 - Mobile apps, browser extensions, consumer clients
-- Full multi-region active-active (region *selection* can be stubbed)
 - Guaranteed prompt-injection immunity
 - Training proprietary foundation models
-- In-core LangChain/OpenAI Agents adapters (contrib post-MVP; see decisions)
+- In-core LangChain/OpenAI Agents adapters (contrib later)
+- SSO, multi-tenant org management, cloud alerts
 
-### 8.3 Soft Non-Goals (post-MVP candidates)
+### 8.3 Soft Non-Goals (post-OSS-MVP candidates)
 
+- LexShield Cloud (hosted control plane)
 - Local embedding models as default
 - Full Cedar / Rego interop
-- Native WASM edge plugin for third-party gateways
+- Framework adapters in `contrib/`
 - SIEM connectors beyond OTLP/webhook
 
 ---
@@ -459,9 +465,9 @@ rules:
 
 ### 11.5 Policy Versioning
 
-- Local: file content + optional `version` field; git is source of truth
-- Cloud: `publish` creates immutable version (`semver` or monotonic `vN`) — **recommendation: monotonic `vN` integer + optional semver label**
-- Shields pin to `policyId@version` or `latest` (latest discouraged in prod)
+- Local: file content + optional `version` field; **git is source of truth**
+- `lexshield check` validates before merge
+- Future Cloud may add immutable published versions — not in first build
 
 ### 11.6 Policy Packs (ship with OSS)
 
@@ -484,18 +490,16 @@ rules:
 
 ### 12.2 Challenge Flow (recommendation)
 
-**Local MVP:**
+**Local only (first build):**
 
 - `CHALLENGE` returns verdict immediately to caller with `challengeId`
 - Side channel: write to sink + optional webhook
 - Approval via CLI: `lexshield challenge approve <id>` / `deny` (local store)
 - SDK mode: `shield.guard` awaits challenge until timeout if `await_challenge: true` (default **false** for agents — return challenge error to agent loop)
 
-**Cloud:**
-
-- Challenge objects stored; Slack interactive approve/deny (post-MVP if Slack hard); MVP: dashboard button + webhook
-
 **Timeouts:** default 1h; `onTimeout: BLOCK` (fail closed).
+
+Hosted challenge UIs (dashboard / Slack) are **deferred with Cloud**.
 
 ### 12.3 What Agents See on BLOCK/CHALLENGE
 
@@ -525,7 +529,6 @@ Return structured error (not only string):
 | **SDK wrap** | Decorator/wrapper around tool functions | Python/TS monoliths |
 | **Evaluate-only** | Caller asks for verdict, executes itself | Custom runtimes |
 | **Local proxy** | HTTP proxy `/execute` forwards if ALLOW | Polyglot / sidecars |
-| **Cloud evaluate** | Remote policy decision | Centralized governance |
 
 ### 13.2 Proxy Semantics (recommendation)
 
@@ -606,12 +609,12 @@ lexshield run                      # start local server/proxy
 lexshield evaluate                 # eval from flags or stdin JSON
 lexshield traces list|show         # query local ndjson
 lexshield challenge list|approve|deny
-lexshield login                    # device flow / API key for Cloud
-lexshield policy push|pull|diff
 lexshield packs list|apply <name>
 lexshield version
-lexshield completion bash|zsh      # nice-to-have same week if cheap
+lexshield completion bash|zsh      # nice-to-have if cheap
 ```
+
+> Cloud commands (`login`, `policy push|pull`) are **not in the first build**.
 
 **DX recommendations:**
 
@@ -641,54 +644,19 @@ lexshield completion bash|zsh      # nice-to-have same week if cheap
 
 ---
 
-## 17. LexShield Cloud
+## 17. Deferred: LexShield Cloud
 
-### 17.1 Purpose
+**Status: out of scope for the first build.**
 
-- Versioned policy distribution
-- Multi-team orgs, API keys
-- Long-term trace storage/search
-- Alerts (email MVP; Slack soon)
-- Invite-only onboarding
+A future hosted control plane *may* add:
 
-### 17.2 Architecture (recommendation)
+- Versioned policy distribution across teams
+- Long-term trace storage/search and alerts
+- Org/API keys, invite onboarding, dashboard
 
-| Component | Choice | Why |
-|-----------|--------|-----|
-| Compute | Cloudflare Workers | Edge, LatticeAG fit |
-| Consistency / queues | Durable Objects | Per-org coordination, challenge state |
-| DB | D1 | Policies, orgs, API keys metadata |
-| Blobs / traces | R2 + optional D1 index | Cheap retention |
-| Auth | API keys (MVP) + magic-link invite; Clerk/Auth0 later if needed |
-| Dashboard | Next.js on Cloudflare Pages or Workers Assets | Fast to ship |
+**Suggested future stack (when revisited):** Cloudflare Workers + Durable Objects + D1 + R2 + Next.js dashboard.
 
-### 17.3 Cloud API (MVP)
-
-```
-POST   /v1/orgs/:orgId/policies
-GET    /v1/orgs/:orgId/policies/:policyId
-POST   /v1/orgs/:orgId/policies/:policyId/publish
-GET    /v1/orgs/:orgId/policies/:policyId/versions
-POST   /v1/orgs/:orgId/evaluate
-POST   /v1/orgs/:orgId/traces/ingest
-GET    /v1/orgs/:orgId/traces
-POST   /v1/orgs/:orgId/alerts
-GET    /v1/orgs/:orgId/alerts
-POST   /v1/invites
-POST   /v1/auth/api-keys
-```
-
-### 17.4 Multi-tenancy
-
-- Strict `orgId` isolation on every query
-- API keys hashed at rest (SHA-256 with pepper)
-- Rate limit evaluate by org (Cloudflare rate limiting / DO counters)
-
-### 17.5 Invite-only
-
-- Public landing + waitlist
-- Invites create org + owner seat
-- No self-serve card billing in MVP (manual Pro upgrades OK)
+Until then: policies and traces stay on the user’s machine / git / their own sinks (file, HTTP, OTLP). Do not scaffold `packages/cloud` in the first build.
 
 ---
 
@@ -817,7 +785,7 @@ interface Trace {
 }
 
 interface SinkConfig {
-  type: 'stdout' | 'file' | 'http' | 'otlp' | 'saas';
+  type: 'stdout' | 'file' | 'http' | 'otlp';
   options: Record<string, unknown>;
 }
 
@@ -826,37 +794,9 @@ interface UpstreamConfig {
   headers?: Record<string, string>;
   timeoutMs?: number;
 }
-
-interface Organization {
-  id: string;
-  name: string;
-  plan: 'free' | 'pro' | 'enterprise';
-  createdAt: string;
-}
-
-interface ApiKey {
-  id: string;
-  orgId: string;
-  name: string;
-  hashedKey: string;
-  prefix: string; // e.g. ls_live_abc
-  createdAt: string;
-  lastUsedAt?: string;
-}
-
-interface AlertRule {
-  id: string;
-  orgId: string;
-  name: string;
-  condition: {
-    verdicts?: VerdictType[];
-    intents?: string[];
-    thresholdCount: number;
-    windowSeconds: number;
-  };
-  channels: Array<{ type: 'email' | 'webhook' | 'slack'; target: string }>;
-}
 ```
+
+> Cloud-only types (`Organization`, `ApiKey`, `AlertRule`) are deferred and omitted from the first-build data model.
 
 ---
 
@@ -885,9 +825,6 @@ shield:
     - type: stdout
     - type: file
       path: ./traces.ndjson
-    - type: saas
-      org_id_env: LEXSHIELD_ORG_ID
-      api_key_env: LEXSHIELD_API_KEY
   proxy:
     enabled: false
     upstreams:
@@ -906,8 +843,6 @@ server:
 |-----|---------|
 | `OPENAI_API_KEY` | LLM classifier |
 | `OPENAI_BASE_URL` | Compatible endpoint |
-| `LEXSHIELD_ORG_ID` | Cloud org |
-| `LEXSHIELD_API_KEY` | Cloud auth |
 | `LEXSHIELD_LOCAL_TOKEN` | Local API auth |
 | `LEXSHIELD_LOG_LEVEL` | debug/info/warn/error |
 
@@ -917,21 +852,17 @@ server:
 
 ```
 ┌─────────────────┐      ┌──────────────────────────────┐      ┌─────────────────┐
-│  Agent / SDK    │─────▶│  LexShield Engine            │─────▶│  Tool Endpoint  │
+│  Agent / SDK    │─────▶│  LexShield Engine (OSS)      │─────▶│  Tool Endpoint  │
 │  / Proxy client │      │  1. Normalize + redact       │      │  (optional)     │
 └─────────────────┘      │  2. Classify (det → LLM)     │      └─────────────────┘
                          │  3. Resolve intent severity  │
                          │  4. Match policy rules       │
                          │  5. Emit verdict             │
                          │  6. Async sinks / OTLP       │
-                         └──────────────┬───────────────┘
-                                        │ optional
-                                        ▼
-                         ┌──────────────────────────────┐
-                         │  LexShield Cloud             │
-                         │  policies · traces · alerts  │
                          └──────────────────────────────┘
 ```
+
+No hosted control plane in the request path for the first build.
 
 ### 20.1 Per-request steps
 
@@ -972,10 +903,9 @@ server:
 | Boundary | Trust assumption |
 |----------|------------------|
 | Caller identity | **Host application authenticates**; LexShield trusts provided `caller` claims |
-| Policy files | Trusted operators / git; Cloud publish is admin-only |
+| Policy files | Trusted operators / git |
 | LLM provider | Sees redacted args; treat as semi-trusted |
 | Local server | Localhost by default; token optional |
-| Cloud API | API key = org privilege |
 
 ### 22.2 Threats & Mitigations
 
@@ -985,7 +915,7 @@ server:
 | Policy bypass via evaluate vs execute mismatch | Single engine path; SDKs always evaluate before user code |
 | Secret leakage to LLM/logs | Redaction filters; trace field allowlist |
 | SSRF via proxy upstreams | Explicit upstream allowlist only |
-| Trace tampering (local) | Best-effort; Cloud signed append-only |
+| Trace tampering (local) | Best-effort; users can ship traces to their own immutable store |
 | Supply chain | Lockfiles, signed releases later; MIT transparency |
 | Cost amplification via LLM classify | Cache, timeouts, circuit breaker, optional `llm: false` for hot tools |
 | Confused deputy | Bind shields to env + caller roles in policy |
@@ -1001,11 +931,10 @@ LexShield **cannot** guarantee safety against all adversarial prompts. It **does
 **Recommendations:**
 
 - **Data minimization**: traces store redacted arguments by default (`trace_arguments: redacted | hash | full`) — default **redacted**
-- **Retention**: local unbounded (user’s disk); Cloud Free 7 days; Pro 90 days; Enterprise custom
-- **Region**: Cloud US-first MVP; EU option on Enterprise roadmap
-- **DPA / SOC2**: roadmap; do not claim compliance until earned
-- **Training**: never train models on customer traces by default; explicit opt-in only if ever offered
+- **Retention**: local unbounded (user’s disk / their sinks)
+- **Training**: never send customer data anywhere except user-configured LLM/OTLP endpoints
 - **PII**: customers responsible for what they put in tool args; we provide redaction helpers
+- Hosted retention/region/DPA topics apply only when/if Cloud is built later
 
 ---
 
@@ -1014,10 +943,9 @@ LexShield **cannot** guarantee safety against all adversarial prompts. It **does
 ### 24.1 Traces
 
 - Every evaluate produces a Trace (Appendix C)
-- Local: NDJSON
-- Cloud: ingest API + indexed search (tool, intent, verdict, rule, time, caller)
+- Local: NDJSON; optional HTTP/OTLP export to the user’s stack
 
-### 24.2 Metrics (MVP local counters; Cloud dashboard later)
+### 24.2 Metrics (local counters)
 
 - `lexshield_evaluations_total{verdict}`
 - `lexshield_classify_duration_ms{classifier}`
@@ -1030,10 +958,10 @@ LexShield **cannot** guarantee safety against all adversarial prompts. It **does
 - Emit span `lexshield.evaluate` with attributes: tool, intent, verdict, rule id, duration
 - Export via OTLP/HTTP sink config
 
-### 24.4 Alerts (Cloud)
+### 24.4 Alerts
 
-- Threshold on BLOCK/CHALLENGE counts
-- Email webhook MVP; Slack post-MVP
+- Not built-in for first build — users alert off their own log/OTLP pipeline
+- Optional: document a sample Grafana/Datadog query on OTLP attributes
 
 ---
 
@@ -1063,7 +991,7 @@ LexShield **cannot** guarantee safety against all adversarial prompts. It **does
 3. **Classifier**: deterministic rules; LLM with recorded HTTP cassettes (VCR)  
 4. **SDK integration**: decorator blocks/allows  
 5. **CLI**: snapshot tests for `check`/`evaluate`  
-6. **Cloud**: contract tests for authz isolation (org A cannot read org B)
+6. **Contract/security**: org isolation N/A until Cloud; focus on redaction + fail-closed tests
 
 ### 26.2 Security regression fixtures (must-have)
 
@@ -1094,16 +1022,15 @@ LexShield **cannot** guarantee safety against all adversarial prompts. It **does
   packages/
     engine-py/              # or /python
     engine-ts/
-    cli/                    # Python Click/Typer OR TS; recommendation: Python Typer for MVP CLI
-    cloud/                  # Workers + dashboard
+    cli/                    # Python Typer CLI
   docs/
   examples/
     python-agent/
     ts-agent/
-  contrib/                  # empty in MVP; adapters later
+  contrib/                  # empty in first build; adapters later
 ```
 
-**Recommendation:** CLI in **Python** for MVP (same engine import). TS CLI can wait.
+**Recommendation:** CLI in **Python** for MVP (same engine import). No `packages/cloud` until Cloud is greenlit.
 
 ---
 
@@ -1114,25 +1041,25 @@ LexShield **cannot** guarantee safety against all adversarial prompts. It **does
 | Python | 3.11+, `uv`, `pydantic` v2, `httpx`, `typer`, `rich` | Fast DX, validation, CLI |
 | TS | TypeScript 5.x, `zod`, Node 20 | Schema parity |
 | Local server | Python `fastapi` + `uvicorn` | Matches Py ecosystem; simple |
-| Cloud | Cloudflare Workers, Hono or itty-router, D1, R2, DO | Edge + LatticeAG |
-| Dashboard | Next.js App Router | Speed + CF Pages |
 | IDs | ULID | Sortable traces |
 | Policy expressions | Custom safe subset | Avoid full CEL complexity in week 1 |
 | Testing | `pytest`, `vitest`, shared fixtures | — |
 | Packaging | PyPI + npm | — |
 
+> Cloudflare / Next.js dashboard stack is **deferred** with Cloud.
+
 ---
 
 ## 29. Developer Experience & Documentation
 
-### 29.1 Must-have docs (MVP)
+### 29.1 Must-have docs (first build)
 
 1. Quickstart (5 minutes)  
 2. Policy authoring guide  
 3. Intent catalog reference  
 4. SDK reference (Py + TS)  
 5. Security model & limitations  
-6. Cloud invite onboarding  
+6. CI example (`lexshield check` in GitHub Actions)
 
 ### 29.2 Examples
 
@@ -1143,157 +1070,147 @@ LexShield **cannot** guarantee safety against all adversarial prompts. It **does
 
 ### 29.3 Telemetry (OSS)
 
-**Recommendation:** Opt-in anonymous usage (`lexshield telemetry enable`) — off by default. Never send args/traces.
+**Recommendation:** Opt-in anonymous usage (`lexshield telemetry enable`) — off by default. Never send args/traces. Can ship after first public tag; not required for M1–M5.
 
 ---
 
-## 30. Dashboard UX (Cloud)
+## 30. Go-to-Market (OSS)
 
-**MVP screens only (avoid dashboard sprawl):**
+**First build is free MIT OSS. No pricing page, no seats, no Cloud tiers.**
 
-1. **Overview** — eval volume, block rate, latency (simple charts)  
-2. **Policies** — list, editor (Monaco), publish, versions diff  
-3. **Traces** — search/filter table, detail drawer  
-4. **Challenges** — queue approve/deny  
-5. **Settings** — API keys, team invites, alert endpoints  
+### 30.1 Launch motion
 
-**Design recommendations (product UI, not marketing site):**
+1. Public GitHub repo + clear README/quickstart  
+2. Post to agent/security communities (HN, relevant Discords, X)  
+3. Content: “OPA for agent tools” + demo GIFs of block/challenge  
+4. Collect design-partner feedback via GitHub Issues / Discord  
 
-- Dense, operator-first UI (this *is* a control-plane dashboard — exception to “no dashboard” landing rules)
-- Dark/light follow system; avoid purple-glow AI cliché
-- Verdict colors: ALLOW green, BLOCK red, CHALLENGE amber, DEFER blue — use consistently
-- Policy editor validates on save via same schema as CLI `check`
-
-**Marketing landing (separate):** brand-first, one hero composition; waitlist CTA — not part of app shell.
-
----
-
-## 31. Pricing, Packaging & Go-to-Market
-
-### 31.1 Packaging
-
-| Tier | Price | Includes |
-|------|-------|----------|
-| OSS | Free (MIT) | Engine, CLI, SDKs, packs |
-| Cloud Free | $0 | 1 org, 1 shield, 10k evals/mo, 7-day traces, community |
-| Cloud Pro | **$99/mo per org** (see question below) | Unlimited shields, 1M evals/mo, 90-day traces, alerts, SSO later |
-| Enterprise | Custom | Regions, audit export, SLA, SSO/SAML, dedicated support |
-
-**Recommendation change vs early draft:** Prefer **per-org** pricing over **per-seat** for MVP simplicity (`$99/org/mo` Pro). Seats matter less until SSO/collaboration expands. Keep seat model as alternative if you sell to security teams that expect seats.
-
-### 31.2 GTM Motion
-
-1. OSS launch (GitHub + HN/Reddit/X + agent Discord communities)  
-2. Content: “OPA for agent tools” + incident-style blog posts  
-3. Invite-only Cloud for design partners (5–15 companies)  
-4. Framework adapter contrib as growth loops  
-
-### 31.3 Design Partner Profile
+### 30.2 Design Partner Profile
 
 - Already running agents with ≥3 production tools  
 - Has a security/platform owner  
 - Willing to share anonymized false-positive feedback  
 
+### 30.3 Monetization
+
+Deferred. Revisit Cloud/support only after OSS traction and clear demand for hosted control plane.
+
 ---
 
-## 32. MVP Milestones (6-Day Build)
+## 31. MVP Milestones (OSS First Build)
 
-> Calendar days are organizational scaffolding only; treat these as **sequenced work packages** with hard deliverables.
+> Sequenced work packages with hard deliverables. No Cloud milestone.
 
 | Mile | Focus | Deliverable | Exit criteria |
 |------|-------|-------------|---------------|
 | **M1** | Policy engine + deterministic classifier | YAML load, match, ALLOW/BLOCK, unit+golden tests | Fixtures pass; `check` works |
 | **M2** | Python SDK + local API | `Shield.guard`, FastAPI `/evaluate`, `/healthz` | End-to-end block demo |
 | **M3** | LLM classifier + taxonomy | OpenAI-compatible classify, built-in intents, redaction | Cassette-tested classify |
-| **M4** | CLI + traces | `init/check/run/evaluate/traces`, NDJSON sink | 5-min quickstart works offline |
+| **M4** | CLI + traces + challenges | `init/check/run/evaluate/traces/challenge`, NDJSON sink | 5-min quickstart works offline |
 | **M5** | TypeScript SDK + proxy | npm package, `/execute` proxy, shared fixtures parity | Same golden verdicts |
-| **M6** | Cloud scaffold + invite | Workers API, D1 schema, invite gate, policy publish, trace ingest stub | Design partner can push policy |
+| **M6** | Docs, packs, examples, polish | Policy packs, examples, README, security docs, CI action | Public-ready OSS tag `v0.1.0` |
 
-**Parallelization note:** Docs and examples written continuously from M2; do not leave docs to the end.
+**Parallelization note:** Docs and examples written continuously from M2; M6 is hardening, not starting docs from zero.
 
 ---
 
-## 33. Post-MVP Roadmap
+## 32. Post-MVP Roadmap
 
-### v0.2
+### After OSS v0.1
 
 - Embedding classifier option  
-- Slack challenges  
-- LangChain + OpenAI Agents contrib adapters  
-- Policy diff UX + dry-run against historical traces  
+- LangChain + OpenAI Agents + Vercel AI SDK contrib adapters  
+- Policy dry-run against fixture/trace corpora  
+- Shared WASM/Rust evaluation core (optional)
 
-### v0.3
+### Later (only if demanded)
 
-- Shared WASM/Rust evaluation core  
-- OPA/Cedar import experiments  
-- SIEM webhook pack  
-- SSO (SAML/OIDC)  
-
-### v1.0
-
-- Stability guarantees, SOC2 path, SLA for Pro/Enterprise  
-- Multi-region retention  
-- Formal threat model whitepaper  
+- **LexShield Cloud** — hosted policies, traces, alerts, dashboard  
+- Slack challenges, SSO, SIEM packs  
+- SOC2 / enterprise packaging  
 
 ---
 
-## 34. Open Questions (with Recommendations)
-
-Use this section as the decision workshop checklist. **Bold** = recommended default if you want to move fast.
+## 33. Open Questions (with Recommendations)
 
 | # | Question | Recommendation | Confidence |
 |---|----------|----------------|------------|
-| Q1 | Per-seat vs per-org Pro pricing? | **Per-org $99/mo** for MVP; revisit seats at SSO | High |
-| Q2 | Dual engine (Py+TS) vs shared core now? | **Dual + shared fixtures for MVP**; WASM core next | High |
-| Q3 | Include framework adapters in MVP? | **No — contrib after M6** | High |
-| Q4 | Local embedding classifier in MVP? | **No — interface only** | High |
-| Q5 | Expression language: full CEL vs subset? | **Subset**; document upgrade path | High |
+| Q1 | SaaS in first build? | **No — OSS only** | **Locked** |
+| Q2 | Dual engine (Py+TS) vs shared core now? | **Dual + shared fixtures**; WASM later | High |
+| Q3 | Framework adapters in first build? | **No — contrib after v0.1** | High |
+| Q4 | Local embedding classifier? | **No — interface only** | High |
+| Q5 | Expression language: full CEL vs subset? | **Subset** | High |
 | Q6 | Challenge await in SDK default? | **Non-blocking raise**; opt-in await | High |
-| Q7 | Cloud auth: Clerk vs API keys only? | **API keys + invite magic link MVP**; Clerk when dashboard multi-user hurts | Medium |
-| Q8 | Default bind address ever non-localhost? | **Never without explicit `--host` and warning** | High |
-| Q9 | Should BLOCK reasons be visible to the agent LLM? | **Short stable codes + human reason**; hide rule internals in prod option | Medium |
-| Q10 | Trace arg storage default? | **Redacted** | High |
-| Q11 | Severity-on-classifier-conflict bias? | **Prefer higher severity intent** | High |
-| Q12 | Package namespace TS `@latticeag/lexshield` OK? | **Yes** | High |
-| Q13 | Monetize OSS support? | Not MVP; optional later | Medium |
-| Q14 | Name collision check “LexShield”? | Confirm trademark/domain (`lexshield.dev`?) before launch | Medium — **please confirm domains you own** |
-| Q15 | Primary demo vertical? | **PII egress + destructive prod actions** as hero demos | High |
-| Q16 | DEFER vs CHALLENGE in MVP UI? | Implement both in engine; **UI focus CHALLENGE only** | High |
-| Q17 | Who hosts LLM for Cloud evaluate? | **Customer BYOK** for classification in hybrid; Cloud may offer managed classifier later | Medium |
-| Q18 | GitHub org/repo public now? | **Public OSS from first tagged release**; develop in public if comfortable | Medium |
+| Q7 | Default bind address? | **`127.0.0.1` only** without explicit `--host` | High |
+| Q8 | BLOCK reasons visible to agent LLM? | Short reason + optional hide rule ids in prod | Medium |
+| Q9 | Trace arg storage default? | **Redacted** | High |
+| Q10 | Severity-on-classifier-conflict? | **Prefer higher severity intent** | High |
+| Q11 | TS package name `@latticeag/lexshield`? | **Yes** | High |
+| Q12 | Primary demo vertical? | **PII egress + destructive prod actions** | High |
+| Q13 | DEFER in first UI/CLI? | Engine yes; **CLI focus CHALLENGE** | High |
+| Q14 | Domain / GitHub public now? | Public at first tagged release | Medium |
 
-### Questions for you (please answer when ready)
+### Still useful to confirm
 
-1. **Domain / brand**: Do you already own a domain for LexShield? Preferred docs URL?  
-2. **Pricing**: Stick with **$99/seat** from the original draft or switch to **$99/org** as recommended here?  
-3. **Cloud auth**: Stay API-key-only for invite MVP, or do you want Clerk from day one?  
-4. **Demo vertical**: Is your first design partner closer to **customer-support agents**, **devops/infra agents**, or **finance ops**? (Affects which policy pack we polish first.)  
-5. **Engine strategy**: Accept dual Py/TS for speed, or do you want to invest early in a **Rust/WASM** core?  
-6. **Adapters**: Any must-have framework for launch week (e.g. Vercel AI SDK) despite the recommendation to defer?  
-7. **Telemetry**: Confirm **opt-in only** for OSS phone-home?  
-8. **Compliance narrative**: Any near-term enterprise prospect that needs SOC2 language on the marketing site (careful — don’t overclaim)?  
+1. **Domain**: docs/site URL you own?  
+2. **Demo vertical**: support vs devops/infra vs finance for the polished pack?  
+3. **Must-have adapter** at launch despite deferral? (default: none)  
+4. **Telemetry**: confirm opt-in only / can wait until after v0.1?
 
 ---
 
-## 35. Decision Log
+## 34. Decision Log
 
 | Decision | Recommendation | Status |
 |----------|----------------|--------|
+| First build shape | **OSS only** — no SaaS | **Locked** |
 | Primary languages | Python first, TypeScript second | **Agreed** |
 | Classifier fallback | Deterministic → (embedding later) → LLM | **Agreed** |
 | Default verdict posture | `BLOCK` (default-deny) | **Agreed** |
-| SaaS platform | Cloudflare Workers + Durable Objects + D1/R2 | **Agreed** |
 | License | MIT | **Agreed** |
-| Framework adapters in core MVP | No; contrib post-MVP | **Recommended** |
-| LLM classifier | Remote OpenAI-compatible first; local post-MVP | **Recommended** |
-| Pro pricing unit | Per-org not per-seat | **Recommended** (overrides earlier seat draft) |
+| LexShield Cloud | Deferred post-OSS | **Locked** |
+| Framework adapters in core | No; contrib after v0.1 | **Recommended** |
+| LLM classifier | Remote OpenAI-compatible first | **Recommended** |
 | Shared evaluation core | Fixtures now; WASM later | **Recommended** |
 | Local server default host | `127.0.0.1` only | **Recommended** |
 | Trace args default | Redacted | **Recommended** |
 | CLI implementation language | Python/Typer | **Recommended** |
 | Expression language | Safe subset, not full CEL | **Recommended** |
-| OSS telemetry | Opt-in, off by default | **Recommended** |
+| OSS telemetry | Opt-in, off by default; optional post-v0.1 | **Recommended** |
 | Challenge SDK behavior | Raise by default; opt-in await | **Recommended** |
+
+---
+
+## 35. Build Readiness
+
+### Verdict: **Yes — ready to build the OSS MVP.**
+
+The problem, scope, API shapes, data model, milestones, and fail-closed defaults are clear enough to start M1 without waiting on Cloud, pricing, or auth vendors.
+
+### Ready enough
+
+- Core loop is well-defined: classify → policy → verdict → trace  
+- Default-deny + deterministic-first reduces early product risk  
+- Python → local API → CLI → TS is a sane build order  
+- Non-goals (especially **no SaaS**) keep scope shippable  
+
+### Accept residual ambiguity (do not block)
+
+- Exact intent catalog wording can evolve behind semver  
+- Expression language can start tiny and grow  
+- Dual Py/TS engine duplication is a known debt  
+- Design-partner vertical can be chosen during pack polish (M6)  
+
+### Do this on day 1 of build
+
+1. Scaffold monorepo (`engine-py`, schemas, fixtures, packs)  
+2. Implement policy load + match + golden fixtures  
+3. Keep Cloud / dashboard / billing out of the tree  
+
+### Do **not** start until blocked (none currently)
+
+- No SaaS credentials, Clerk, or Cloudflare account needed for first build  
+- LLM key only needed from M3; M1–M2 can be deterministic-only  
 
 ---
 
@@ -1391,8 +1308,9 @@ NDJSON line (logical):
 | Version | Date | Notes |
 |---------|------|-------|
 | 0.1 | 2026-07-11 | Initial SPEC committed to main |
-| 0.2 | 2026-07-11 | Expanded planning SPEC: personas, taxonomy, classifiers, policy semantics, Cloud, security, DX, pricing recommendation, open questions, appendices |
+| 0.2 | 2026-07-11 | Expanded planning SPEC |
+| 0.3 | 2026-07-11 | **OSS-first lock**: SaaS/Cloud removed from first build; M6 = docs/polish; build-readiness = go |
 
 ---
 
-*End of SPEC.md — no implementation in this revision; planning only.*
+*End of SPEC.md — planning only; implementation starts when build is kicked off.*
