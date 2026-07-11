@@ -6,31 +6,27 @@ Demonstrates LexShield **CHALLENGE** for a destructive infra action in productio
 
 1. Agent calls `delete_resource` in `environment=production`.
 2. Classifier maps tool → `infra.delete.resource`.
-3. `baseline-deny` rule `challenge-delete-prod` returns **CHALLENGE**.
-4. Approve via CLI, then re-evaluate or execute.
-
-## Prerequisites
-
-```bash
-pip install lexshield
-lexshield init --pack baseline-deny
-```
+3. Rule `challenge-delete-prod` returns **CHALLENGE** and writes a record to `.lexshield/challenges/`.
+4. Approve via CLI; use `await_challenge=True` on the guard to wait for approval.
 
 ## Run
 
 ```bash
-python main.py
+cd examples/python-challenge-delete
+uv run --project ../.. python main.py
 ```
 
-Expected: `LexShieldChallengeError` with a `challenge_id`. Approve with:
+Expected: `CHALLENGE` with a `challenge_id`.
+
+Approve:
 
 ```bash
 lexshield challenge approve <challenge_id>
+lexshield challenge list
 ```
-
-Then re-run or call `shield.evaluate(...)` again after approval (documented in SDK once challenge resume is wired).
 
 ## Related
 
+- Golden fixture: `fixtures/golden/challenge-delete-prod/`
 - Policy pack: `packs/baseline-deny/`
-- CLI: `docs/cli.md`
+- CLI: [docs/cli.md](../../docs/cli.md)

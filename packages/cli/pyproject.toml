@@ -14,6 +14,7 @@ dependencies = [
 
 [project.scripts]
 lexshield = "lexshield_cli.main:app"
+lexshield-check-packs = "lexshield_cli.scripts.check_packs:main"
 
 [build-system]
 requires = ["hatchling"]

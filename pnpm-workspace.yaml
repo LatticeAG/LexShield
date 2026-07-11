@@ -1,2 +1,3 @@
 packages:
   - "packages/engine-ts"
+  - "examples/ts-evaluate"

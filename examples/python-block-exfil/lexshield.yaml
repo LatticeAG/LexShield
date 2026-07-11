@@ -1,0 +1,13 @@
+version: 1
+shield:
+  id: block-exfil-demo
+  name: block-exfil-demo
+  policy: ./policy.yaml
+  classifiers:
+    - type: deterministic
+      path: ./rules.yaml
+  fail_on_classifier_error: BLOCK
+  sinks:
+    - type: stdout
+    - type: file
+      path: ./traces.ndjson

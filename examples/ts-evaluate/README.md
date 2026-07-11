@@ -2,24 +2,20 @@
 
 Minimal `@latticeag/lexshield` evaluate-only example. No tool execution — prints verdict JSON.
 
-## Scenario
-
-Evaluate a tool call against local `lexshield.yaml` (deterministic classifier only).
-
-## Prerequisites
-
-```bash
-npm install @latticeag/lexshield
-lexshield init --pack baseline-deny
-```
-
 ## Run
 
 ```bash
-npx tsx index.ts
+# from repo root
+pnpm install
+pnpm --filter @latticeag/lexshield build
+
+cd examples/ts-evaluate
+pnpm exec tsx index.ts
 ```
+
+Expected: `ALLOW` for `health_check`, `BLOCK` for `send_email` with an AWS key in the body.
 
 ## Related
 
 - Golden fixtures: `fixtures/golden/`
-- SDK reference: `docs/sdk-typescript.md`
+- SDK reference: [docs/sdk-typescript.md](../../docs/sdk-typescript.md)

@@ -1,0 +1,11 @@
+version: 1
+shield:
+  id: ts-evaluate-demo
+  name: ts-evaluate-demo
+  policy: ./policy.yaml
+  classifiers:
+    - type: deterministic
+      path: ./rules.yaml
+  fail_on_classifier_error: BLOCK
+  sinks:
+    - type: stdout

@@ -4,24 +4,29 @@ Demonstrates LexShield blocking a `send_email` tool call that contains an AWS ac
 
 ## Scenario
 
-1. Agent calls `send_email` with `AKIA...` in the message body.
+1. Agent calls `send_email` with `AKIA…` in the message body.
 2. Deterministic patterns in `rules.yaml` classify intent as `security.secret_exposure`.
-3. `baseline-deny` policy rule `block-secret-exposure` returns **BLOCK**.
-
-## Prerequisites
-
-```bash
-pip install lexshield   # once published
-lexshield init --pack baseline-deny
-```
+3. Policy rule `block-secret-exposure` returns **BLOCK**.
 
 ## Run
 
+From the repository root:
+
 ```bash
-python main.py
+cd examples/python-block-exfil
+uv run --project ../.. python main.py
 ```
 
-Expected: `LexShieldBlockedError` with reason *"Possible secret exposure in tool arguments"*.
+Expected:
+
+```
+BLOCKED: Possible secret exposure in tool arguments (rule=block-secret-exposure)
+```
+
+## Config modes
+
+- **Default:** `Shield.from_config("lexshield.yaml")` — files ship in this directory.
+- **Inline paths:** `LEXSHIELD_USE_CONFIG=0 uv run --project ../.. python main.py` — constructs `Shield` with explicit `policy_path` / `rules_path`.
 
 ## Related
 
