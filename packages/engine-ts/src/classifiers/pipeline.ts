@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { classifyDeterministic, loadDeterministicRulesFromFile } from './deterministic.js';
+import { getDefaultCircuitBreaker, type LLMCircuitBreaker } from './circuit-breaker.js';
 import { LLMClassifier } from './llm.js';
 import { getIntentSeverity, type Taxonomy, builtinTaxonomy } from '../taxonomy.js';
 import type { Classification, DeterministicRules, ToolCallRequest } from '../types.js';
@@ -17,6 +18,7 @@ export interface ClassifierPipelineOptions {
   taxonomy?: Taxonomy;
   classifierIds?: string[];
   cacheEnabled?: boolean;
+  circuitBreaker?: LLMCircuitBreaker;
 }
 
 interface CacheEntry {
@@ -124,6 +126,7 @@ export class ClassifierPipeline {
   private readonly taxonomy: Taxonomy;
   private readonly classifierIds: string[];
   private readonly cacheEnabled: boolean;
+  private readonly circuitBreaker: LLMCircuitBreaker;
 
   constructor(options: ClassifierPipelineOptions = {}) {
     this.deterministicRules = options.deterministicRules;
@@ -134,6 +137,7 @@ export class ClassifierPipeline {
       this.llm ? `llm:openai:${this.llm.model}` : 'llm:disabled',
     ];
     this.cacheEnabled = options.cacheEnabled ?? true;
+    this.circuitBreaker = options.circuitBreaker ?? getDefaultCircuitBreaker();
   }
 
   static async fromRulesPath(
@@ -178,10 +182,13 @@ export class ClassifierPipeline {
       }
     }
 
-    if (this.llm?.isAvailable()) {
+    if (this.llm?.isAvailable() && !this.circuitBreaker.isOpen()) {
       const llmResult = await this.llm.classify(request);
       if (llmResult) {
+        this.circuitBreaker.recordSuccess();
         results.push(llmResult);
+      } else {
+        this.circuitBreaker.recordFailure();
       }
     }
 

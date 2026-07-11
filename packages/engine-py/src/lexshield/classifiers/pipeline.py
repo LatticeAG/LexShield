@@ -90,9 +90,11 @@ class ClassifierPipeline:
         self.deterministic = DeterministicClassifier(rules_path)
         self.llm = llm
         self._cache = _FingerprintCache()
+        self.last_classifier_error = False
 
     async def classify(self, request: ToolCallRequest) -> list[Classification]:
         """Return ordered classifications from the pipeline."""
+        self.last_classifier_error = False
         if _cache_enabled(request):
             cached = self._cache.get(_fingerprint(request))
             if cached is not None:
@@ -100,6 +102,7 @@ class ClassifierPipeline:
 
         results: list[Classification] = []
         llm_invoked = False
+        llm_failed = False
 
         det = self.deterministic.classify(request)
         if det is not None:
@@ -111,12 +114,19 @@ class ClassifierPipeline:
                 return merged
 
         if self.llm is not None and self.llm.is_available():
-            llm_invoked = True
-            llm_result = await self.llm.classify(request)
-            if llm_result is not None:
-                results.append(llm_result)
+            if self.llm.circuit_breaker.is_open():
+                llm_failed = True
+            else:
+                llm_invoked = True
+                llm_result = await self.llm.classify(request)
+                if llm_result is not None:
+                    results.append(llm_result)
+                else:
+                    llm_failed = True
 
         if not results:
+            if det is None and (self.llm is None or not self.llm.is_available() or llm_failed):
+                self.last_classifier_error = True
             results.append(
                 Classification(
                     intent=UNKNOWN_INTENT,

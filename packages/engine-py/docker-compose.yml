@@ -1,0 +1,12 @@
+services:
+  lexshield:
+    build:
+      context: ../..
+      dockerfile: packages/engine-py/Dockerfile
+    ports:
+      - "8787:8787"
+    volumes:
+      - ../../traces.ndjson:/app/traces.ndjson
+      - ../../.lexshield:/app/.lexshield
+    environment:
+      LEXSHIELD_LOCAL_TOKEN: ${LEXSHIELD_LOCAL_TOKEN:-}

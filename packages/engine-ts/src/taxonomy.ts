@@ -29,6 +29,10 @@ export const BUILTIN_INTENT_SEVERITY: Readonly<Record<string, number>> = {
 
 export const BUILTIN_TAXONOMY_VERSION = 'v0.1';
 
+export const BUILTIN_INTENTS: readonly string[] = Object.freeze(
+  Object.keys(BUILTIN_INTENT_SEVERITY).sort(),
+);
+
 const DEFAULT_UNKNOWN_SEVERITY = 50;
 const CUSTOM_INTENT_DEFAULT_SEVERITY = 50;
 

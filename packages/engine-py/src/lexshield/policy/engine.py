@@ -6,7 +6,7 @@ import time
 
 from lexshield.models import Classification, Policy, ToolCallRequest, Verdict, VerdictType
 from lexshield.policy.loader import CompiledPolicy
-from lexshield.policy.match import rule_matches, sort_rules
+from lexshield.policy.match import alternatives_min_confidence, rule_matches, sort_rules
 
 UNKNOWN_INTENT = "unknown.unclassified"
 
@@ -20,6 +20,7 @@ class PolicyEngine:
         else:
             self._compiled = policy
         self._sorted_rules = sort_rules(self._compiled.rules)
+        self._alternatives_min_confidence = alternatives_min_confidence(self.policy)
 
     @property
     def policy(self) -> Policy:
@@ -40,7 +41,12 @@ class PolicyEngine:
             (
                 compiled
                 for compiled in self._sorted_rules
-                if rule_matches(compiled, request, classifications)
+                if rule_matches(
+                    compiled,
+                    request,
+                    classifications,
+                    alternatives_min_confidence=self._alternatives_min_confidence,
+                )
             ),
             None,
         )

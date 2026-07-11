@@ -17,6 +17,7 @@ from lexshield.models import ToolCallRequest, Verdict
 from lexshield.shield import Shield
 from lexshield.traces.sink import NDJSONTraceSink, StdoutTraceSink
 from lexshield_cli.config import resolve_config_path, resolve_policy_and_rules
+from lexshield_cli.context import config_option, resolve_command_config
 
 console = Console()
 
@@ -159,6 +160,7 @@ async def _evaluate_request(
 
 
 def evaluate(
+    ctx: typer.Context,
     tool: str | None = typer.Option(None, "--tool", help="Tool name to evaluate."),
     args: str = typer.Option("{}", "--args", help="Tool arguments as JSON."),
     caller: str | None = typer.Option(
@@ -178,16 +180,7 @@ def evaluate(
         help="Sets context.environment.",
     ),
     tags: str = typer.Option("{}", "--tags", help="Context tags as JSON object."),
-    config: Path = typer.Option(
-        Path("lexshield.yaml"),
-        "--config",
-        "-c",
-        help="Path to lexshield.yaml or config directory.",
-        exists=False,
-        file_okay=True,
-        dir_okay=True,
-        resolve_path=True,
-    ),
+    config: Path | None = config_option(),
     policy: Path | None = typer.Option(
         None,
         "--policy",
@@ -207,9 +200,24 @@ def evaluate(
     json_output: bool = typer.Option(False, "--json", help="Emit machine-readable verdict JSON."),
     stdin: bool = typer.Option(False, "--stdin", help="Read ToolCallRequest JSON from stdin."),
 ) -> None:
-    """Evaluate a tool call against loaded policy (offline)."""
+    """Evaluate a tool call against loaded policy (offline).
+
+    Examples:
+
+        lexshield evaluate --tool health_check --args '{}'
+
+        lexshield evaluate --tool send_email \\
+          --args '{"to":"user@example.com","body":"AKIA0123456789012345"}' \\
+          --json
+
+        lexshield -c ./lexshield.yaml evaluate --tool delete_resource \\
+          --args '{"resource_id":"db-1"}' --environment production --json
+
+        echo '{"tool":{"name":"health_check"},"arguments":{}}' | lexshield evaluate --stdin --json
+    """
+    resolved = resolve_command_config(ctx, config)
     try:
-        config_path = resolve_config_path(config) if config.exists() else config
+        config_path = resolve_config_path(resolved) if resolved.exists() else resolved
         shield = _load_shield(config=config_path, policy=policy, rules=rules)
     except LexShieldConfigError as exc:
         console.print(f"[red]Config error:[/red] {exc}")

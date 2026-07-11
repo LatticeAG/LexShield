@@ -70,6 +70,44 @@ export class ChallengeStore {
     return openChallenges;
   }
 
+  get(challengeId: string): ChallengeRecord | null {
+    const path = join(this.basePath, `${challengeId}.json`);
+    if (!existsSync(path)) {
+      return null;
+    }
+
+    return JSON.parse(readFileSync(path, 'utf8')) as ChallengeRecord;
+  }
+
+  /**
+   * Resolve open challenges that have exceeded their timeout.
+   * Applies onTimeout: ALLOW -> approved, BLOCK -> denied.
+   */
+  expireOpen(now: Date = new Date()): ChallengeRecord[] {
+    const expired: ChallengeRecord[] = [];
+
+    for (const record of this.listOpen()) {
+      const deadline =
+        new Date(record.createdAt).getTime() + record.timeoutSeconds * 1000;
+      if (now.getTime() < deadline) {
+        continue;
+      }
+
+      const updated: ChallengeRecord = {
+        ...record,
+        status: record.onTimeout === 'ALLOW' ? 'approved' : 'denied',
+        resolvedAt: now.toISOString(),
+        actor: 'system:timeout',
+      };
+
+      const path = join(this.basePath, `${record.id}.json`);
+      writeFileSync(path, JSON.stringify(updated, null, 2), 'utf8');
+      expired.push(updated);
+    }
+
+    return expired;
+  }
+
   resolve(
     challengeId: string,
     options: {

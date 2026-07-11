@@ -10,6 +10,7 @@ import yaml
 from rich.console import Console
 
 from lexshield.errors import LexShieldConfigError
+from lexshield_cli.context import config_option, resolve_command_config
 from lexshield.models import VerdictType
 from lexshield.policy.loader import load_policy
 from lexshield.taxonomy import BUILTIN_INTENTS
@@ -71,16 +72,8 @@ def _warn_unknown_intents(intent_refs: set[str]) -> list[str]:
 
 
 def check(
-    config: Path = typer.Option(
-        Path("lexshield.yaml"),
-        "--config",
-        "-c",
-        help="Path to lexshield.yaml or config directory.",
-        exists=False,
-        file_okay=True,
-        dir_okay=True,
-        resolve_path=True,
-    ),
+    ctx: typer.Context,
+    config: Path | None = config_option(),
     policy: Path | None = typer.Option(
         None,
         "--policy",
@@ -104,7 +97,8 @@ def check(
     warnings: list[str] = []
 
     try:
-        config_path = resolve_config_path(config) if config.exists() else config
+        resolved = resolve_command_config(ctx, config)
+        config_path = resolve_config_path(resolved) if resolved.exists() else resolved
 
         if policy is not None:
             policy_path = policy

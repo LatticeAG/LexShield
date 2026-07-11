@@ -1,0 +1,76 @@
+# Built-in intent catalog for LexShield v0.1.0 (SPEC Appendix B).
+# Frozen at 24 intents. Extend via custom.<name> in taxonomy.yaml (not listed here).
+version: v0.1
+intents:
+  network.request.health:
+    severity: 5
+    description: Health/ping
+  data.read.public:
+    severity: 10
+    description: Read non-sensitive
+  data.read.internal:
+    severity: 25
+    description: Read internal business data
+  data.read.pii:
+    severity: 60
+    description: Read PII
+  data.query.sql:
+    severity: 40
+    description: SQL read/query
+  data.write.record:
+    severity: 45
+    description: Create/update records
+  data.delete.record:
+    severity: 75
+    description: Delete data
+  data.exfiltrate:
+    severity: 95
+    description: Suspected exfiltration
+  comms.read.inbox:
+    severity: 35
+    description: Read messages/inbox
+  comms.send.email:
+    severity: 50
+    description: Send email
+  comms.send.slack:
+    severity: 40
+    description: Send Slack/chat
+  comms.send.external:
+    severity: 70
+    description: Message external party
+  network.request.http:
+    severity: 55
+    description: Arbitrary HTTP
+  infra.provision.resource:
+    severity: 60
+    description: Create infra
+  infra.mutate.resource:
+    severity: 65
+    description: Change infra
+  infra.delete.resource:
+    severity: 85
+    description: Destroy infra
+  finance.charge.create:
+    severity: 80
+    description: Create charge/payment
+  finance.transfer.create:
+    severity: 90
+    description: Move money
+  identity.permission.grant:
+    severity: 85
+    description: Grant access
+  identity.auth.impersonate:
+    severity: 90
+    description: Impersonation
+  code.execute.shell:
+    severity: 88
+    description: Shell/code exec
+  code.write.repo:
+    severity: 50
+    description: Write code/files
+  security.secret_exposure:
+    severity: 98
+    description: Secrets in args/egress
+  unknown.unclassified:
+    severity: 50
+    description: Fallback

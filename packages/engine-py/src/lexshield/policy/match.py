@@ -8,14 +8,29 @@ from lexshield.models import Classification, ToolCallRequest
 from lexshield.policy.loader import CompiledRule
 
 
-def _matching_intents(classifications: list[Classification]) -> set[str]:
+DEFAULT_ALTERNATIVES_MIN_CONFIDENCE = 0.4
+
+
+def alternatives_min_confidence(policy: object) -> float:
+    """Return alternatives confidence threshold from policy.severity_threshold."""
+    threshold = getattr(policy, "severity_threshold", None) or {}
+    raw = threshold.get("alternatives_min_confidence", DEFAULT_ALTERNATIVES_MIN_CONFIDENCE)
+    return float(raw)
+
+
+def _matching_intents(
+    classifications: list[Classification],
+    *,
+    alternatives_min_confidence: float = DEFAULT_ALTERNATIVES_MIN_CONFIDENCE,
+) -> set[str]:
     intents: set[str] = set()
     if not classifications:
         return intents
     primary = classifications[0]
     intents.add(primary.intent)
     for alternative in primary.alternatives:
-        intents.add(alternative.intent)
+        if alternative.confidence >= alternatives_min_confidence:
+            intents.add(alternative.intent)
     return intents
 
 
@@ -79,6 +94,8 @@ def rule_matches(
     compiled_rule: CompiledRule,
     request: ToolCallRequest,
     classifications: list[Classification],
+    *,
+    alternatives_min_confidence: float = DEFAULT_ALTERNATIVES_MIN_CONFIDENCE,
 ) -> bool:
     """Return True when all present match criteria on the rule are satisfied."""
     rule = compiled_rule.rule
@@ -93,7 +110,10 @@ def rule_matches(
             return False
 
     if match.intents:
-        intents = _matching_intents(classifications)
+        intents = _matching_intents(
+            classifications,
+            alternatives_min_confidence=alternatives_min_confidence,
+        )
         if not any(intent in intents for intent in match.intents):
             return False
 

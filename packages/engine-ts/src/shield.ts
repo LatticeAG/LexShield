@@ -5,8 +5,10 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { parse as parseYaml } from 'yaml';
 
+import { ChallengeNotifier } from './challenges/notifier.js';
 import { ChallengeStore } from './challenges/store.js';
 import { ClassifierPipeline } from './classifiers/pipeline.js';
+import { LLMClassifier } from './classifiers/llm.js';
 import {
   LexShieldBlockedError,
   LexShieldChallengeError,
@@ -14,7 +16,15 @@ import {
 } from './errors.js';
 import { evaluatePolicy } from './policy/engine.js';
 import { loadPolicyFromFile, loadPolicyFromFileSync, resolvePolicyPath } from './policy/loader.js';
-import { NDJSONTraceSink } from './traces/sink.js';
+import {
+  buildTracePayload,
+  CompositeTraceSink,
+  HttpTraceSink,
+  NDJSONTraceSink,
+  OtlpTraceSink,
+  StdoutTraceSink,
+  type TraceSink,
+} from './traces/sink.js';
 import {
   DeterministicRulesSchema,
   ShieldConfigSchema,
@@ -22,8 +32,8 @@ import {
   type OutcomeType,
   type Policy,
   type ShieldConfig,
+  type SinkConfig,
   type ToolCallRequest,
-  type Trace,
   type Verdict,
 } from './types.js';
 
@@ -41,6 +51,9 @@ export interface ShieldOptions {
   policyPath: string;
   classifierPipeline?: ClassifierPipeline;
   challengeStore?: ChallengeStore;
+  challengeNotifier?: ChallengeNotifier;
+  traceSinks?: TraceSink[];
+  /** @deprecated Use traceSinks. Kept for backward compatibility. */
   traceSink?: NDJSONTraceSink | null;
 }
 
@@ -84,21 +97,56 @@ export class ShieldSession {
   }
 }
 
-function resolveTraceSinkPath(
+function createTraceSinksFromConfig(
   configPath: string,
-  sinks: ShieldConfig['shield']['sinks'],
-): string | null {
+  sinks: SinkConfig[],
+): TraceSink[] {
+  const baseDir = dirname(resolve(configPath));
+  const traceSinks: TraceSink[] = [];
+
   for (const sink of sinks) {
-    if (sink.type !== 'file') {
+    if (sink.type === 'file') {
+      const relativePath =
+        sink.path ?? (sink.options.path as string | undefined) ?? './traces.ndjson';
+      traceSinks.push(new NDJSONTraceSink(resolve(baseDir, relativePath)));
       continue;
     }
 
-    const sinkRecord = sink as { path?: string; options?: { path?: string } };
-    const relativePath = sinkRecord.path ?? sinkRecord.options?.path ?? './traces.ndjson';
-    return resolve(dirname(resolve(configPath)), relativePath);
+    if (sink.type === 'stdout') {
+      traceSinks.push(new StdoutTraceSink());
+      continue;
+    }
+
+    if (sink.type === 'http') {
+      const url = (sink.options.url as string | undefined) ?? sink.path;
+      if (url) {
+        traceSinks.push(
+          new HttpTraceSink({
+            url,
+            headers: sink.options.headers as Record<string, string> | undefined,
+            timeoutMs: sink.options.timeoutMs as number | undefined,
+          }),
+        );
+      }
+      continue;
+    }
+
+    if (sink.type === 'otlp') {
+      const endpoint = (sink.options.endpoint as string | undefined) ?? sink.path;
+      if (endpoint) {
+        traceSinks.push(
+          new OtlpTraceSink({
+            endpoint,
+            serviceName: sink.options.serviceName as string | undefined,
+            headers: sink.options.headers as Record<string, string> | undefined,
+            timeoutMs: sink.options.timeoutMs as number | undefined,
+          }),
+        );
+      }
+    }
   }
 
-  return null;
+  return traceSinks;
 }
 
 function resolveRulesPath(
@@ -109,6 +157,31 @@ function resolveRulesPath(
     if (classifier.type === 'deterministic' && typeof classifier.path === 'string') {
       return resolve(dirname(resolve(configPath)), classifier.path);
     }
+  }
+
+  return null;
+}
+
+function createLlmClassifier(
+  classifiers: ShieldConfig['shield']['classifiers'],
+): LLMClassifier | null {
+  for (const classifier of classifiers) {
+    if (classifier.type !== 'llm') {
+      continue;
+    }
+
+    return new LLMClassifier({
+      model: typeof classifier.model === 'string' ? classifier.model : undefined,
+      apiKeyEnv:
+        typeof classifier.api_key_env === 'string' ? classifier.api_key_env : undefined,
+      baseUrlEnv:
+        typeof classifier.base_url_env === 'string' ? classifier.base_url_env : undefined,
+      timeoutMs:
+        typeof classifier.timeout_ms === 'number' ? classifier.timeout_ms : undefined,
+      optional:
+        typeof classifier.optional === 'boolean' ? classifier.optional : undefined,
+      redact: typeof classifier.redact === 'boolean' ? classifier.redact : undefined,
+    });
   }
 
   return null;
@@ -136,6 +209,9 @@ export class Shield {
   private readonly config: ShieldConfig;
   readonly classifierPipeline: ClassifierPipeline;
   readonly challengeStore: ChallengeStore;
+  readonly challengeNotifier: ChallengeNotifier | null;
+  private readonly traceSinks: TraceSink[];
+  /** NDJSON sink when configured, for backward compatibility. */
   readonly traceSink: NDJSONTraceSink | null;
 
   private constructor(options: ShieldOptions) {
@@ -146,7 +222,22 @@ export class Shield {
     this.name = options.config.shield.name;
     this.classifierPipeline = options.classifierPipeline ?? new ClassifierPipeline();
     this.challengeStore = options.challengeStore ?? new ChallengeStore();
-    this.traceSink = options.traceSink ?? null;
+    this.challengeNotifier = options.challengeNotifier ?? null;
+
+    if (options.traceSinks) {
+      this.traceSinks =
+        options.traceSinks.length > 1
+          ? [new CompositeTraceSink(options.traceSinks)]
+          : [...options.traceSinks];
+    } else if (options.traceSink) {
+      this.traceSinks = [options.traceSink];
+    } else {
+      this.traceSinks = [];
+    }
+
+    this.traceSink =
+      this.traceSinks.find((sink): sink is NDJSONTraceSink => sink instanceof NDJSONTraceSink) ??
+      null;
   }
 
   static fromConfigSync(configPath: string): Shield {
@@ -195,21 +286,21 @@ export class Shield {
       deterministicRules = rulesResult.data;
     }
 
-    const llmEnabled = config.shield.classifiers.some((classifier) => classifier.type === 'llm');
+    const llm = createLlmClassifier(config.shield.classifiers);
     const classifierPipeline = new ClassifierPipeline({
       deterministicRules,
-      llmEnabled,
+      llm,
+      llmEnabled: llm !== null,
     });
 
-    const traceSinkPath = resolveTraceSinkPath(resolvedConfigPath, config.shield.sinks);
-    const traceSink = traceSinkPath ? new NDJSONTraceSink(traceSinkPath) : null;
+    const traceSinks = createTraceSinksFromConfig(resolvedConfigPath, config.shield.sinks);
 
     return new Shield({
       config,
       policy,
       policyPath,
       classifierPipeline,
-      traceSink,
+      traceSinks,
     });
   }
 
@@ -246,23 +337,25 @@ export class Shield {
     const policy = await loadPolicyFromFile(policyPath);
 
     const rulesPath = resolveRulesPath(resolvedConfigPath, config.shield.classifiers);
+    const llm = createLlmClassifier(config.shield.classifiers);
     const classifierPipeline = rulesPath
       ? await ClassifierPipeline.fromRulesPath(rulesPath, {
-          llmEnabled: config.shield.classifiers.some((classifier) => classifier.type === 'llm'),
+          llm,
+          llmEnabled: llm !== null,
         })
       : new ClassifierPipeline({
-          llmEnabled: config.shield.classifiers.some((classifier) => classifier.type === 'llm'),
+          llm,
+          llmEnabled: llm !== null,
         });
 
-    const traceSinkPath = resolveTraceSinkPath(resolvedConfigPath, config.shield.sinks);
-    const traceSink = traceSinkPath ? new NDJSONTraceSink(traceSinkPath) : null;
+    const traceSinks = createTraceSinksFromConfig(resolvedConfigPath, config.shield.sinks);
 
     return new Shield({
       config,
       policy,
       policyPath,
       classifierPipeline,
-      traceSink,
+      traceSinks,
     });
   }
 
@@ -288,11 +381,12 @@ export class Shield {
   async evaluate(input: EvaluateInput): Promise<Verdict> {
     const startedAt = Date.now();
     const requestId = input.requestId ?? input.id ?? randomUUID();
+    const timestamp = input.timestamp ?? new Date().toISOString();
 
     const request = ToolCallRequestSchema.parse({
       id: requestId,
       shieldId: this.id,
-      timestamp: input.timestamp ?? new Date().toISOString(),
+      timestamp,
       caller: input.caller ?? { id: 'anonymous', type: 'agent' },
       tool: { name: input.tool },
       arguments: input.arguments ?? {},
@@ -300,19 +394,22 @@ export class Shield {
     });
 
     const classifications = await this.classifierPipeline.classify(request);
-    const verdict = evaluatePolicy(
-      this.policy,
-      { request, classifications },
-      startedAt,
-    );
+    let verdict = evaluatePolicy(this.policy, { request, classifications }, startedAt);
+    verdict = this.attachChallenge(verdict, requestId);
 
-    if (this.traceSink) {
-      const trace: Trace = {
-        id: requestId,
+    if (this.traceSinks.length > 0) {
+      const payload = buildTracePayload({
+        traceId: requestId,
+        shieldId: this.id,
+        timestamp,
         request,
+        classifications,
         verdict,
-      };
-      this.traceSink.write(trace);
+      });
+
+      for (const sink of this.traceSinks) {
+        sink.write(payload);
+      }
     }
 
     return verdict;
@@ -327,9 +424,44 @@ export class Shield {
   }
 
   async recordOutcome(requestId: string, outcome: OutcomeType): Promise<void> {
-    if (this.traceSink) {
-      this.traceSink.updateOutcome(requestId, outcome);
+    for (const sink of this.traceSinks) {
+      sink.updateOutcome(requestId, outcome);
     }
+  }
+
+  private attachChallenge(verdict: Verdict, requestId: string): Verdict {
+    if (verdict.decision !== 'CHALLENGE' && verdict.decision !== 'DEFER') {
+      return verdict;
+    }
+
+    if (!verdict.matchedRuleId) {
+      return verdict;
+    }
+
+    const rule = this.policy.rules.find((item) => item.id === verdict.matchedRuleId);
+    if (!rule?.challenge) {
+      return verdict;
+    }
+
+    const challengeId = this.challengeStore.create({
+      requestId,
+      reason: verdict.reason,
+      timeoutSeconds: rule.challenge.timeoutSeconds,
+      onTimeout: rule.challenge.onTimeout,
+    });
+
+    const record = this.challengeStore.get(challengeId);
+    if (record && this.challengeNotifier) {
+      const channel = rule.challenge.channel;
+      if (channel === 'stdout' || channel === 'webhook') {
+        void this.challengeNotifier.notify(record, channel);
+      }
+    }
+
+    return {
+      ...verdict,
+      challengeId,
+    };
   }
 
   guard<TArgs extends Record<string, unknown>, TResult>(
@@ -454,4 +586,3 @@ export class Shield {
     }
   }
 }
-

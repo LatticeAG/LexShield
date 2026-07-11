@@ -64,6 +64,7 @@ class ChallengeConfig(BaseModel):
     timeout_seconds: int = Field(alias="timeoutSeconds")
     on_timeout: VerdictType = Field(alias="onTimeout")
     reviewers: list[str] | None = None
+    url: str | None = None
 
     model_config = {"populate_by_name": True}
 

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from lexshield.models import Verdict
+from typing import Any
+
+from lexshield.models import Verdict, VerdictType
 
 
 class LexShieldError(Exception):
@@ -31,3 +33,39 @@ class LexShieldChallengeError(LexShieldError):
 
 class LexShieldConfigError(LexShieldError):
     """Raised when configuration or policy is invalid."""
+
+
+_ERROR_CODES: dict[VerdictType, str] = {
+    VerdictType.BLOCK: "lexshield_blocked",
+    VerdictType.CHALLENGE: "lexshield_challenged",
+    VerdictType.DEFER: "lexshield_deferred",
+}
+
+
+def redact_verdict_for_agent(verdict: Verdict, *, expose_rule_ids: bool) -> Verdict:
+    """Return a verdict copy safe for agent-facing surfaces."""
+    if expose_rule_ids or verdict.matched_rule_id is None:
+        return verdict
+    return verdict.model_copy(update={"matchedRuleId": None})
+
+
+def agent_facing_error(
+    verdict: Verdict,
+    *,
+    expose_rule_ids: bool = True,
+    error_code: str | None = None,
+) -> dict[str, Any]:
+    """Build structured agent-facing error payload per SPEC §13.3."""
+    code = error_code or _ERROR_CODES.get(verdict.decision, "lexshield_blocked")
+    payload: dict[str, Any] = {
+        "error": code,
+        "verdict": verdict.decision.value,
+        "reason": verdict.reason,
+        "requestId": verdict.request_id,
+        "retryable": False,
+    }
+    if expose_rule_ids and verdict.matched_rule_id:
+        payload["matchedRuleId"] = verdict.matched_rule_id
+    if verdict.challenge_id and verdict.decision == VerdictType.CHALLENGE:
+        payload["challengeId"] = verdict.challenge_id
+    return payload

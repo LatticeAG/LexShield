@@ -14,6 +14,7 @@ from typing import Any, Callable, TypeVar
 import ulid
 import yaml
 
+from lexshield.challenges.notifier import notify_challenge_created
 from lexshield.challenges.store import ChallengeStore
 from lexshield.classifiers.llm import LLMClassifier
 from lexshield.classifiers.pipeline import ClassifierPipeline
@@ -21,6 +22,7 @@ from lexshield.errors import (
     LexShieldBlockedError,
     LexShieldChallengeError,
     LexShieldConfigError,
+    redact_verdict_for_agent,
 )
 from lexshield.models import (
     Caller,
@@ -37,7 +39,9 @@ from lexshield.policy.loader import load_policy
 from lexshield.redaction import redact_arguments
 from lexshield.server.proxy import forward_upstream
 from lexshield.traces.sink import (
+    HttpTraceSink,
     NDJSONTraceSink,
+    OtlpTraceSink,
     StdoutTraceSink,
     TraceSink,
     build_trace_payload,
@@ -103,9 +107,11 @@ class Shield:
         trace_sink_path: Path | None = None,
         trace_sinks: list[TraceSink] | None = None,
         challenge_store_path: Path | None = None,
+        challenge_webhook_url: str | None = None,
         proxy_upstreams: dict[str, UpstreamConfig] | None = None,
         fail_on_classifier_error: VerdictType = VerdictType.BLOCK,
         redact_emails: str = "hash",
+        expose_rule_ids: bool = True,
     ) -> None:
         self.shield_id = shield_id
         self.name = name
@@ -120,8 +126,10 @@ class Shield:
         self.challenge_store = ChallengeStore(
             challenge_store_path or ".lexshield/challenges"
         )
+        self.challenge_webhook_url = challenge_webhook_url
         self.fail_on_classifier_error = fail_on_classifier_error
         self.redact_emails = redact_emails
+        self.expose_rule_ids = expose_rule_ids
         self.proxy_upstreams = proxy_upstreams or {}
 
         if trace_sinks is not None:
@@ -177,6 +185,24 @@ class Shield:
                 )
             elif sink_type == "stdout":
                 trace_sinks.append(StdoutTraceSink())
+            elif sink_type == "http":
+                url = sink.get("url")
+                if url:
+                    trace_sinks.append(
+                        HttpTraceSink(
+                            url,
+                            timeout_ms=sink.get("timeout_ms", 2000),
+                        )
+                    )
+            elif sink_type == "otlp":
+                url = sink.get("url")
+                if url:
+                    trace_sinks.append(
+                        OtlpTraceSink(
+                            url,
+                            timeout_ms=sink.get("timeout_ms", 2000),
+                        )
+                    )
 
         trace_sink_path = None
         for sink in shield_cfg.get("sinks", []):
@@ -188,6 +214,9 @@ class Shield:
         challenge_store_path = base_dir / challenges_cfg.get(
             "path", ".lexshield/challenges"
         )
+        challenge_webhook_url = challenges_cfg.get("webhook") or challenges_cfg.get(
+            "webhook_url"
+        )
 
         proxy_upstreams: dict[str, UpstreamConfig] = {}
         proxy_cfg = shield_cfg.get("proxy", {})
@@ -198,6 +227,7 @@ class Shield:
         fail_raw = shield_cfg.get("fail_on_classifier_error", "BLOCK")
         fail_on_classifier_error = VerdictType(fail_raw)
         redact_emails = shield_cfg.get("redact", {}).get("emails", "hash")
+        expose_rule_ids = shield_cfg.get("expose_rule_ids", True)
 
         return cls(
             shield_id=shield_cfg.get("id", "local"),
@@ -208,9 +238,11 @@ class Shield:
             trace_sink_path=trace_sink_path,
             trace_sinks=trace_sinks or None,
             challenge_store_path=challenge_store_path,
+            challenge_webhook_url=challenge_webhook_url,
             proxy_upstreams=proxy_upstreams,
             fail_on_classifier_error=fail_on_classifier_error,
             redact_emails=redact_emails,
+            expose_rule_ids=expose_rule_ids,
         )
 
     def session(
@@ -268,13 +300,24 @@ class Shield:
         )
 
         classifications = await self.classifier_pipeline.classify(request)
-        verdict = self.policy_engine.evaluate(request, classifications)
-        verdict = verdict.model_copy(
-            update={
-                "requestId": rid,
-                "durationMs": (time.perf_counter() - start) * 1000,
-            }
-        )
+        if self.classifier_pipeline.last_classifier_error:
+            duration_ms = (time.perf_counter() - start) * 1000
+            verdict = Verdict(
+                requestId=rid,
+                decision=self.fail_on_classifier_error,
+                reason="Classifier pipeline failed; applied fail_on_classifier_error",
+                classifications=classifications,
+                durationMs=duration_ms,
+                policyVersion=self.policy.version,
+            )
+        else:
+            verdict = self.policy_engine.evaluate(request, classifications)
+            verdict = verdict.model_copy(
+                update={
+                    "requestId": rid,
+                    "durationMs": (time.perf_counter() - start) * 1000,
+                }
+            )
         verdict = self._attach_challenge(verdict, request_id=rid)
 
         if self.trace_sinks:
@@ -435,6 +478,13 @@ class Shield:
             timeout_seconds=rule.challenge.timeout_seconds,
             on_timeout=rule.challenge.on_timeout,
         )
+        record = self.challenge_store.get(challenge_id)
+        if record is not None:
+            notify_challenge_created(
+                record,
+                channel=rule.challenge.channel,
+                webhook_url=rule.challenge.url or self.challenge_webhook_url,
+            )
         return verdict.model_copy(update={"challenge_id": challenge_id})
 
     async def _raise_for_verdict(
@@ -443,10 +493,14 @@ class Shield:
         *,
         await_challenge: bool = False,
     ) -> None:
+        agent_verdict = redact_verdict_for_agent(
+            verdict,
+            expose_rule_ids=self.expose_rule_ids,
+        )
         if verdict.decision == VerdictType.BLOCK:
             raise LexShieldBlockedError(
                 verdict.reason,
-                verdict=verdict,
+                verdict=agent_verdict,
                 request_id=verdict.request_id,
             )
         if verdict.decision == VerdictType.CHALLENGE:
@@ -455,7 +509,7 @@ class Shield:
                 return
             raise LexShieldChallengeError(
                 verdict.reason,
-                verdict=verdict,
+                verdict=agent_verdict,
                 request_id=verdict.request_id,
             )
 
@@ -469,6 +523,7 @@ class Shield:
             )
 
         while True:
+            self.challenge_store.expire_open()
             record = self.challenge_store.get(challenge_id)
             if record is None:
                 raise LexShieldChallengeError(
@@ -483,6 +538,15 @@ class Shield:
             if status == "denied":
                 raise LexShieldBlockedError(
                     "Challenge denied",
+                    verdict=verdict,
+                    request_id=verdict.request_id,
+                )
+            if status == "timed_out":
+                on_timeout = VerdictType(record.get("onTimeout", VerdictType.BLOCK.value))
+                if on_timeout == VerdictType.ALLOW:
+                    return
+                raise LexShieldBlockedError(
+                    "Challenge timed out",
                     verdict=verdict,
                     request_id=verdict.request_id,
                 )

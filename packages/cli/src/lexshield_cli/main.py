@@ -2,9 +2,22 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import typer
 
-from lexshield_cli.commands import challenge, check, evaluate, init, packs, run, traces
+from lexshield_cli.commands import (
+    challenge,
+    check,
+    evaluate,
+    export_openapi,
+    init,
+    packs,
+    run,
+    traces,
+)
+from lexshield_cli.completion import SUPPORTED_SHELLS, render_completion_script
+from lexshield_cli.context import CliState
 
 app = typer.Typer(
     name="lexshield",
@@ -12,10 +25,31 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
+
+@app.callback()
+def main(
+    ctx: typer.Context,
+    config: Path = typer.Option(
+        Path("lexshield.yaml"),
+        "--config",
+        "-c",
+        help="Path to lexshield.yaml or config directory (default: ./lexshield.yaml).",
+        exists=False,
+        file_okay=True,
+        dir_okay=True,
+        resolve_path=True,
+    ),
+) -> None:
+    """Global options applied before subcommands."""
+    ctx.ensure_object(CliState)
+    ctx.obj.config = config
+
+
 app.command()(init.init)
 app.command()(check.check)
 app.command()(run.run)
 app.command()(evaluate.evaluate)
+app.command("export-openapi")(export_openapi.export_openapi)
 
 traces_app = typer.Typer(help="Query local NDJSON traces.")
 traces_app.command("list")(traces.list_traces)
@@ -38,14 +72,26 @@ app.add_typer(packs_app, name="packs")
 def completion(
     shell: str = typer.Argument(help="Shell name (bash, zsh, fish)."),
 ) -> None:
-    """Generate shell completion script (stub)."""
+    """Generate shell completion script for lexshield subcommands."""
+    import sys
+
     from rich.console import Console
 
-    console = Console()
-    console.print(
-        f"# LexShield shell completion for {shell} is not yet implemented.\n"
-        f"# Re-run after a future release or use: lexshield --help"
-    )
+    console = Console(stderr=True)
+    if shell not in SUPPORTED_SHELLS:
+        supported = ", ".join(sorted(SUPPORTED_SHELLS))
+        console.print(f"[red]Unsupported shell:[/red] {shell} (choose: {supported})")
+        raise typer.Exit(code=1)
+
+    try:
+        script = render_completion_script(app, shell)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    sys.stdout.write(script)
+    if not script.endswith("\n"):
+        sys.stdout.write("\n")
 
 
 @app.command()

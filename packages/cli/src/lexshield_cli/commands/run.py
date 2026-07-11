@@ -9,6 +9,7 @@ from rich.console import Console
 
 from lexshield.errors import LexShieldConfigError
 from lexshield.shield import Shield
+from lexshield_cli.context import config_option, resolve_command_config
 
 console = Console()
 
@@ -24,14 +25,10 @@ def _resolve_config_path(config: Path) -> Path:
 
 
 def run(
+    ctx: typer.Context,
     host: str = typer.Option("127.0.0.1", "--host", help="Bind host."),
     port: int = typer.Option(8787, "--port", help="Bind port."),
-    config: Path = typer.Option(
-        Path("lexshield.yaml"),
-        "--config",
-        "-c",
-        help="Path to lexshield.yaml or config directory.",
-    ),
+    config: Path | None = config_option(),
     i_understand_bind_all: bool = typer.Option(
         False,
         "--i-understand-bind-all",
@@ -52,7 +49,7 @@ def run(
         console.print(f"[red]uvicorn is required:[/red] {exc}")
         raise typer.Exit(code=1) from exc
 
-    config_path = _resolve_config_path(config)
+    config_path = _resolve_config_path(resolve_command_config(ctx, config))
     if not config_path.exists():
         console.print(f"[red]Config not found:[/red] {config_path}")
         raise typer.Exit(code=1)

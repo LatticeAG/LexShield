@@ -9,10 +9,24 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from lexshield.models import ToolCallRequest, VerdictType
+from lexshield.server.middleware import RequestIdMiddleware
 from lexshield.server.proxy import UpstreamForwardError
 from lexshield.shield import Shield
 
 _bearer = HTTPBearer(auto_error=False)
+
+_CONFIG_DOC = (
+    "Start the server with `lexshield run -c <path>` (or `--config`) pointing at "
+    "`lexshield.yaml` or a directory containing it."
+)
+
+_OPENAPI_TAGS = [
+    {"name": "health", "description": "Liveness and readiness probes."},
+    {"name": "shields", "description": "Evaluate and execute tool calls through a shield."},
+    {"name": "policy", "description": "Inspect and hot-reload shield policy."},
+    {"name": "traces", "description": "Query NDJSON audit traces written by the shield."},
+    {"name": "challenges", "description": "Human-in-the-loop challenge queue."},
+]
 
 
 def _require_token(
@@ -27,21 +41,38 @@ def _require_token(
 
 def create_app(shield: Shield | None = None) -> FastAPI:
     """Create the LexShield FastAPI application."""
-    app = FastAPI(title="LexShield", version="0.1.0")
+    app = FastAPI(
+        title="LexShield",
+        version="0.1.0",
+        description=(
+            "Local policy firewall API for agent tool calls. "
+            f"{_CONFIG_DOC}"
+        ),
+        openapi_tags=_OPENAPI_TAGS,
+    )
+    app.add_middleware(RequestIdMiddleware)
     app.state.shield = shield
     app.state.policy_loaded = shield is not None
 
-    @app.get("/healthz")
+    @app.get("/healthz", tags=["health"])
     async def healthz() -> dict[str, str]:
+        """Liveness probe — process is running."""
         return {"status": "ok"}
 
-    @app.get("/readyz")
+    @app.get("/readyz", tags=["health"])
     async def readyz() -> dict[str, bool]:
+        """Readiness probe — shield and policy are loaded."""
         return {"ready": bool(app.state.policy_loaded)}
 
     @app.post(
         "/v1/shields/{shield_id}/evaluate",
+        tags=["shields"],
         dependencies=[Depends(_require_token)],
+        summary="Evaluate a tool call",
+        description=(
+            "Return a policy verdict without executing the tool. "
+            f"{_CONFIG_DOC}"
+        ),
     )
     async def evaluate(shield_id: str, body: ToolCallRequest) -> dict[str, Any]:
         active = _get_shield(app, shield_id)
@@ -57,7 +88,15 @@ def create_app(shield: Shield | None = None) -> FastAPI:
 
     @app.post(
         "/v1/shields/{shield_id}/execute",
+        tags=["shields"],
         dependencies=[Depends(_require_token)],
+        summary="Evaluate and forward to upstream",
+        description=(
+            "Evaluate the tool call; when the verdict is ALLOW and an upstream is "
+            "configured under `shield.proxy.upstreams`, forward the request and "
+            "return the upstream JSON body. Records outcome EXECUTED on success. "
+            f"{_CONFIG_DOC}"
+        ),
     )
     async def execute(shield_id: str, body: ToolCallRequest) -> dict[str, Any]:
         active = _get_shield(app, shield_id)
@@ -87,7 +126,10 @@ def create_app(shield: Shield | None = None) -> FastAPI:
 
     @app.get(
         "/v1/shields/{shield_id}/policy",
+        tags=["policy"],
         dependencies=[Depends(_require_token)],
+        summary="Get compiled policy",
+        description=f"Return the active compiled policy JSON. {_CONFIG_DOC}",
     )
     async def get_policy(shield_id: str) -> dict[str, Any]:
         active = _get_shield(app, shield_id)
@@ -95,7 +137,14 @@ def create_app(shield: Shield | None = None) -> FastAPI:
 
     @app.post(
         "/v1/shields/{shield_id}/policy/reload",
+        tags=["policy"],
         dependencies=[Depends(_require_token)],
+        summary="Hot-reload policy from disk",
+        description=(
+            "Reload policy from the path configured at server start. On failure the "
+            "previous policy remains active. "
+            f"{_CONFIG_DOC}"
+        ),
     )
     async def reload_policy(shield_id: str) -> dict[str, str]:
         active = _get_shield(app, shield_id)
@@ -105,7 +154,16 @@ def create_app(shield: Shield | None = None) -> FastAPI:
             return {"status": "failed", "message": str(exc)}
         return {"status": "reloaded"}
 
-    @app.get("/v1/traces", dependencies=[Depends(_require_token)])
+    @app.get(
+        "/v1/traces",
+        tags=["traces"],
+        dependencies=[Depends(_require_token)],
+        summary="List audit traces",
+        description=(
+            "Filter NDJSON traces by decision, tool, or intent. "
+            f"{_CONFIG_DOC}"
+        ),
+    )
     async def list_traces(
         decision: str | None = None,
         tool: str | None = None,
@@ -125,7 +183,13 @@ def create_app(shield: Shield | None = None) -> FastAPI:
         )
         return {"traces": traces, "total": total}
 
-    @app.get("/v1/challenges", dependencies=[Depends(_require_token)])
+    @app.get(
+        "/v1/challenges",
+        tags=["challenges"],
+        dependencies=[Depends(_require_token)],
+        summary="List open challenges",
+        description=f"Return pending human-in-the-loop challenges. {_CONFIG_DOC}",
+    )
     async def list_challenges() -> dict[str, Any]:
         active = _get_shield_or_none(app)
         if active is None:
@@ -134,7 +198,14 @@ def create_app(shield: Shield | None = None) -> FastAPI:
 
     @app.post(
         "/v1/challenges/{challenge_id}/resolve",
+        tags=["challenges"],
         dependencies=[Depends(_require_token)],
+        summary="Resolve a challenge",
+        description=(
+            "Approve or deny a pending challenge. Body: "
+            '`{"decision": "approve"|"deny", "actor": "..."}`. '
+            f"{_CONFIG_DOC}"
+        ),
     )
     async def resolve_challenge(
         challenge_id: str,

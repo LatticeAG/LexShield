@@ -1,9 +1,9 @@
-"""Local challenge store under .lexshield/challenges (stub)."""
+"""Local challenge store under .lexshield/challenges."""
 
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -50,12 +50,40 @@ class ChallengeStore:
 
     def list_open(self) -> list[dict[str, Any]]:
         """List open challenges."""
+        self.expire_open()
         open_challenges: list[dict[str, Any]] = []
         for path in sorted(self.base_path.glob("*.json")):
             record = json.loads(path.read_text(encoding="utf-8"))
             if record.get("status") == "open":
                 open_challenges.append(record)
         return open_challenges
+
+    def expire_open(self) -> list[dict[str, Any]]:
+        """Mark open challenges past timeout as timed_out; return expired records."""
+        now = datetime.now(timezone.utc)
+        expired: list[dict[str, Any]] = []
+
+        for path in sorted(self.base_path.glob("*.json")):
+            record = json.loads(path.read_text(encoding="utf-8"))
+            if record.get("status") != "open":
+                continue
+
+            created_raw = record.get("createdAt")
+            if not created_raw:
+                continue
+
+            created = datetime.fromisoformat(created_raw)
+            timeout_seconds = int(record.get("timeoutSeconds", 3600))
+            deadline = created + timedelta(seconds=timeout_seconds)
+            if now < deadline:
+                continue
+
+            record["status"] = "timed_out"
+            record["resolvedAt"] = now.isoformat()
+            path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+            expired.append(record)
+
+        return expired
 
     def resolve(
         self,

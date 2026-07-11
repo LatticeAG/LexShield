@@ -117,8 +117,17 @@ def load_golden_fixture(scenario: str, *, root: Path | None = None) -> GoldenFix
 def _classifications_for_request(
     request: ToolCallRequest,
     classifier: DeterministicClassifier,
+    *,
+    scenario_dir: Path | None = None,
 ) -> list[Classification]:
     """Run deterministic classifier only, matching CI golden semantics."""
+    if scenario_dir is not None:
+        classifications_ref = scenario_dir / "classifications-ref.json"
+        if classifications_ref.exists():
+            with classifications_ref.open(encoding="utf-8") as handle:
+                data = json.load(handle)
+            return [Classification.model_validate(item) for item in data]
+
     result = classifier.classify(request)
     if result is not None:
         return [result]
@@ -135,7 +144,11 @@ def _classifications_for_request(
 
 def run_golden_fixture(fixture: GoldenFixture) -> Verdict:
     """Evaluate a loaded golden fixture and return the verdict."""
-    classifications = _classifications_for_request(fixture.request, fixture.classifier)
+    classifications = _classifications_for_request(
+        fixture.request,
+        fixture.classifier,
+        scenario_dir=fixture.directory,
+    )
     return fixture.policy_engine.evaluate(fixture.request, classifications)
 
 
