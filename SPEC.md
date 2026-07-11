@@ -1,12 +1,12 @@
 # LexShield — Product & Engineering Specification
 
-> **Status**: Planning (v0.3 — OSS-first build)  
+> **Status**: Planning (v0.4 — v0.1 feature freeze)  
 > **Owner**: LatticeAG  
 > **License**: MIT  
 > **First build**: **Open-source only** (CLI + SDKs + engine). No SaaS.  
 > **Deferred**: LexShield Cloud (hosted control plane) — post-MVP, only after OSS is solid.  
 > **This document is the source of truth for build decisions until replaced by ADRs.**  
-> **Build readiness**: Yes for OSS MVP — see [§35 Build Readiness](#35-build-readiness).
+> **Ship list**: [§9 v0.1 Feature Freeze](#9-v01-feature-freeze-specific) · **Build readiness**: [§36](#36-build-readiness)
 
 ---
 
@@ -20,36 +20,38 @@
 6. [Core Concepts & Glossary](#6-core-concepts--glossary)
 7. [Success Metrics](#7-success-metrics)
 8. [Scope: Goals, Non-Goals, and Phasing](#8-scope-goals-non-goals-and-phasing)
-9. [Intent Taxonomy](#9-intent-taxonomy)
-10. [Classifier Architecture](#10-classifier-architecture)
-11. [Policy Language & Engine](#11-policy-language--engine)
-12. [Verdicts, Challenges & Human-in-the-Loop](#12-verdicts-challenges--human-in-the-loop)
-13. [Execution Interception & Integration Modes](#13-execution-interception--integration-modes)
-14. [SDKs (Python & TypeScript)](#14-sdks-python--typescript)
-15. [CLI Surface](#15-cli-surface)
-16. [Local API & Proxy](#16-local-api--proxy)
-17. [Deferred: LexShield Cloud](#17-deferred-lexshield-cloud)
-18. [Data Model](#18-data-model)
-19. [Configuration Schema](#19-configuration-schema)
-20. [Architecture & Request Pipeline](#20-architecture--request-pipeline)
-21. [Performance, Caching & Reliability](#21-performance-caching--reliability)
-22. [Security & Threat Model](#22-security--threat-model)
-23. [Privacy, Compliance & Data Handling](#23-privacy-compliance--data-handling)
-24. [Observability & Audit](#24-observability--audit)
-25. [Error Handling & Failure Modes](#25-error-handling--failure-modes)
-26. [Testing Strategy](#26-testing-strategy)
-27. [Repository & Monorepo Layout](#27-repository--monorepo-layout)
-28. [Tech Stack Recommendations](#28-tech-stack-recommendations)
-29. [Developer Experience & Documentation](#29-developer-experience--documentation)
-30. [Go-to-Market (OSS)](#30-go-to-market-oss)
-31. [MVP Milestones (OSS First Build)](#31-mvp-milestones-oss-first-build)
-32. [Post-MVP Roadmap](#32-post-mvp-roadmap)
-33. [Open Questions (with Recommendations)](#33-open-questions-with-recommendations)
-34. [Decision Log](#34-decision-log)
-35. [Build Readiness](#35-build-readiness)
-36. [Appendix A — Example Policy Packs](#appendix-a--example-policy-packs)
-37. [Appendix B — Built-in Intent Catalog (MVP)](#appendix-b--built-in-intent-catalog-mvp)
-38. [Appendix C — Trace Event Schema](#appendix-c--trace-event-schema)
+9. [v0.1 Feature Freeze (Specific)](#9-v01-feature-freeze-specific)
+10. [Intent Taxonomy](#10-intent-taxonomy)
+11. [Classifier Architecture](#11-classifier-architecture)
+12. [Policy Language & Engine](#12-policy-language--engine)
+13. [Verdicts, Challenges & Human-in-the-Loop](#13-verdicts-challenges--human-in-the-loop)
+14. [Execution Interception & Integration Modes](#14-execution-interception--integration-modes)
+15. [SDKs (Python & TypeScript)](#15-sdks-python--typescript)
+16. [CLI Surface](#16-cli-surface)
+17. [Local API & Proxy](#17-local-api--proxy)
+18. [Deferred: LexShield Cloud](#18-deferred-lexshield-cloud)
+19. [Data Model](#19-data-model)
+20. [Configuration Schema](#20-configuration-schema)
+21. [Architecture & Request Pipeline](#21-architecture--request-pipeline)
+22. [Performance, Caching & Reliability](#22-performance-caching--reliability)
+23. [Security & Threat Model](#23-security--threat-model)
+24. [Privacy, Compliance & Data Handling](#24-privacy-compliance--data-handling)
+25. [Observability & Audit](#25-observability--audit)
+26. [Error Handling & Failure Modes](#26-error-handling--failure-modes)
+27. [Testing Strategy](#27-testing-strategy)
+28. [Repository & Monorepo Layout](#28-repository--monorepo-layout)
+29. [Tech Stack Recommendations](#29-tech-stack-recommendations)
+30. [Developer Experience & Documentation](#30-developer-experience--documentation)
+31. [Go-to-Market (OSS)](#31-go-to-market-oss)
+32. [MVP Milestones (OSS First Build)](#32-mvp-milestones-oss-first-build)
+33. [Post-MVP Roadmap](#33-post-mvp-roadmap)
+34. [Open Questions (with Recommendations)](#34-open-questions-with-recommendations)
+35. [Decision Log](#35-decision-log)
+36. [Build Readiness](#36-build-readiness)
+37. [Appendix A — Example Policy Packs](#appendix-a--example-policy-packs)
+38. [Appendix B — Built-in Intent Catalog (v0.1)](#appendix-b--built-in-intent-catalog-v01)
+39. [Appendix C — Trace Event Schema](#appendix-c--trace-event-schema)
+40. [Appendix D — v0.1 Acceptance Checklist](#appendix-d--v01-acceptance-checklist)
 
 ---
 
@@ -277,9 +279,234 @@ First value is fully offline. No account, no hosted dependency.
 
 ---
 
-## 9. Intent Taxonomy
+## 9. v0.1 Feature Freeze (Specific)
 
-### 9.1 Design Recommendations (confident)
+> This is the **authoritative ship list** for tag `v0.1.0`.  
+> If it is not listed here as **IN**, it is **OUT** of v0.1 — even if mentioned elsewhere as future work.
+
+### 9.1 Product promise (one sentence)
+
+Install LexShield, wrap a tool (or hit `/evaluate`), load a YAML policy, and get an explainable `ALLOW` / `BLOCK` / `CHALLENGE` before the tool runs — fully offline except optional LLM classify.
+
+### 9.2 IN — must ship in v0.1.0
+
+#### A. Core engine (Python — source of truth)
+
+| Feature | Exact behavior |
+|---------|----------------|
+| Policy load | Parse `policy.yaml` (YAML 1.2) + JSON equivalent; reject unknown fields in strict mode (`lexshield check --strict`) |
+| Default deny | `defaultVerdict: BLOCK` required in shipped packs; engine allows override but `check` warns if `ALLOW` |
+| Rule match | AND across match fields; OR within list fields; tool globs (`send_*`, `db.*`) |
+| Priority | Highest `priority` number wins among matching rules; tie-break: lexicographic `rule.id` ascending |
+| Verdicts | `ALLOW`, `BLOCK`, `CHALLENGE`, `DEFER` all implemented in engine |
+| Expressions | Safe subset only — see §9.5; compile at load; no runtime `eval` |
+| Deterministic classifier | `tool_map` + `patterns` (`any_arg_regex`, `arg_regex:<key>`) from `rules.yaml` |
+| LLM classifier | OpenAI-compatible chat + JSON object response; default model `gpt-4o-mini`; timeout **2000ms**; skipped if no API key and config marks llm optional |
+| Classifier order | Deterministic first; if confidence ≥ **0.90**, skip LLM; else run LLM and merge |
+| Conflict bias | On disagreement, pick **higher severity** intent as primary; keep both in `classifications[]` |
+| Redaction | Before LLM + before trace write: AWS keys, `sk-`/`sk-proj-` tokens, Bearer tokens, emails optional flag; default ON for secrets, emails hashed in traces |
+| Fail closed | Classifier total failure with no deterministic hit → `unknown.unclassified` → apply policy (usually BLOCK) |
+| Fingerprint cache | Deterministic-only results cached 60s; **disabled** when `context.messages` or `priorCalls` present |
+| Traces | Append NDJSON; never block evaluate > buffered write |
+| Challenges | Local store under `.lexshield/challenges/` (or config path); approve/deny via CLI/API; timeout → `onTimeout` (default BLOCK) |
+
+#### B. Python SDK (`lexshield` on PyPI)
+
+| API | Spec |
+|-----|------|
+| `Shield.from_config(path)` | Load yaml; validate; compile policy |
+| `await shield.evaluate(...)` | Returns `Verdict`; never executes tool |
+| `@shield.guard` / `@shield.guard(tool="name")` | Wraps async fn; sync wrapper via `shield.guard_sync` also shipped |
+| `shield.session(conversation_id=..., environment=..., tags=...)` | contextvars for nested calls |
+| `await shield.record_outcome(request_id, outcome)` | Updates last trace line / side index |
+| Errors | `LexShieldBlockedError`, `LexShieldChallengeError`, `LexShieldConfigError` — all carry `verdict` / `request_id` |
+
+**Decorator defaults (locked):**
+
+- On `BLOCK` → raise `LexShieldBlockedError`  
+- On `CHALLENGE` → raise `LexShieldChallengeError` (do **not** await approval)  
+- Opt-in: `@shield.guard(await_challenge=True)` waits until approve/deny/timeout  
+
+#### C. Local HTTP API (FastAPI)
+
+Ship exactly these routes:
+
+| Method | Path | Notes |
+|--------|------|-------|
+| `POST` | `/v1/shields/{shield_id}/evaluate` | body = ToolCallRequest (id optional → ULID) |
+| `POST` | `/v1/shields/{shield_id}/execute` | evaluate + forward iff ALLOW + upstream configured |
+| `GET` | `/v1/shields/{shield_id}/policy` | compiled policy JSON |
+| `POST` | `/v1/shields/{shield_id}/policy/reload` | hot reload; keep old on failure |
+| `GET` | `/v1/traces` | `?decision=&tool=&intent=&limit=&offset=` |
+| `GET` | `/v1/challenges` | open challenges |
+| `POST` | `/v1/challenges/{id}/resolve` | `{ "decision": "approve"\|"deny", "actor": "..." }` |
+| `GET` | `/healthz` | liveness |
+| `GET` | `/readyz` | policy loaded |
+
+Defaults: host `127.0.0.1`, port `8787`. If `LEXSHIELD_LOCAL_TOKEN` set → require Bearer token.
+
+#### D. Proxy execute (v0.1)
+
+- Only tools listed under `shield.proxy.upstreams` may be forwarded  
+- Adds headers `X-LexShield-Request-Id`, `X-LexShield-Verdict`  
+- BLOCK/CHALLENGE/DEFER → **HTTP 403** + JSON error body (no 202 in v0.1)  
+- Upstream timeout default **5000ms**  
+
+#### E. CLI (`lexshield`)
+
+| Command | Must do |
+|---------|---------|
+| `lexshield init [--pack baseline-deny\|pii-guard\|change-window]` | Write `lexshield.yaml`, `policy.yaml`, `rules.yaml`, `.gitignore` entries for traces/challenges |
+| `lexshield check [--strict]` | Exit 0/1; print rule count, intent refs, warnings |
+| `lexshield run [--host 127.0.0.1] [--port 8787]` | Start API; refuse `0.0.0.0` unless `--i-understand-bind-all` |
+| `lexshield evaluate --tool T --args '{}' [--caller ...] [-c config]` | Print verdict; `--json` for machine output |
+| `lexshield evaluate --stdin` | Read ToolCallRequest JSON |
+| `lexshield traces list [--decision BLOCK] [--limit 50]` | Read NDJSON |
+| `lexshield traces show <request_id>` | One trace |
+| `lexshield challenge list` | Open challenges |
+| `lexshield challenge approve <id>` / `deny <id>` | Resolve |
+| `lexshield packs list` / `packs apply <name>` | Copy pack files into cwd |
+| `lexshield version` | Semver + git sha if available |
+
+#### F. TypeScript SDK (`@latticeag/lexshield`)
+
+**v0.1 parity (required):**
+
+- `Shield.fromConfig` / `evaluate` / `guard` for async functions  
+- Same verdict JSON shape as Python  
+- Golden fixtures: **100% identical decisions** on `fixtures/golden/**`  
+
+**v0.1 not required in TS:** CLI, FastAPI server, challenge file store (TS may call local HTTP API for challenges).
+
+#### G. Built-in content
+
+| Asset | Exact v0.1 set |
+|-------|----------------|
+| Intents | **24** locked in Appendix B (no more, no fewer for v0.1 tag) |
+| Packs | `baseline-deny`, `pii-guard`, `change-window` — full YAML in Appendix A |
+| Examples | `examples/python-block-exfil`, `examples/python-challenge-delete`, `examples/ts-evaluate` |
+| Schemas | JSON Schema for Policy, ToolCallRequest, Verdict, Trace |
+| CI example | `.github/workflows/lexshield-check.example.yml` |
+
+#### H. Docs (required pages)
+
+1. README quickstart (≤5 minutes, deterministic-only path)  
+2. `docs/policy.md` — authoring + priority + expressions  
+3. `docs/intents.md` — catalog + severity  
+4. `docs/sdk-python.md` / `docs/sdk-typescript.md`  
+5. `docs/security.md` — threat model + honest limits  
+6. `docs/cli.md`  
+
+### 9.3 OUT — explicitly cut from v0.1
+
+Do **not** build these even if “easy”:
+
+- LexShield Cloud, login, policy push/pull, saas sink  
+- Embedding classifier (interface stub OK, no model)  
+- Framework adapters (LangChain, OpenAI Agents, CrewAI, Vercel AI SDK)  
+- Slack / email challenge channels (webhook + stdout only)  
+- Full CEL / OPA / Cedar  
+- Rate limiting product, quotas, anomaly ML  
+- Web dashboard / policy UI  
+- Telemetry phone-home (even opt-in — defer to v0.2)  
+- Sync multi-region anything  
+- Argument mutation / rewriting tool calls  
+- Streaming tool responses through proxy  
+- DEFER resolution UI (engine accepts `DEFER`; CLI only lists; no separate defer workflow beyond challenge-like timeout)  
+- Windows-first packaging quirks beyond “should work on Win/Mac/Linux” best effort  
+
+### 9.4 v0.1 “wow” demos (ship as runnable examples)
+
+These three demos define the product story. Each must run with **deterministic classifier only** (no API key):
+
+1. **Block exfil** — `send_email` with AWS key in body → `security.secret_exposure` → `BLOCK`  
+2. **Challenge delete** — `delete_resource` in `environment=production` → `CHALLENGE` → CLI approve → re-evaluate/execute path documented  
+3. **Allow health** — `health_check` → `ALLOW` under default-deny policy  
+
+LLM demo (optional fourth, docs-only): same exfil without secret pattern, LLM suggests `data.exfiltrate` — cassette-tested, not required for quickstart.
+
+### 9.5 Expression language (frozen subset)
+
+**Allowed:**
+
+```
+intent, confidence, tool.name, tool.namespace,
+caller.id, caller.type, caller.roles,
+env, tags.<key>, args.<key>
+```
+
+**Operators:** `== != > >= < <= && || !` · `in` (list) · `startsWith` · `contains` · `matches` (RE2-ish subset)
+
+**Disallow:** function calls beyond above, attribute chaining loops, imports, side effects.
+
+Example:
+
+```yaml
+expression: 'env == "production" && confidence >= 0.7 && args.to contains "@gmail.com"'
+```
+
+### 9.6 Redaction rules (frozen defaults)
+
+| Pattern | Replacement |
+|---------|-------------|
+| `AKIA[0-9A-Z]{16}` | `[REDACTED_AWS_KEY]` |
+| `sk-[a-zA-Z0-9]{20,}` / `sk-proj-[...]` | `[REDACTED_API_KEY]` |
+| `Bearer [A-Za-z0-9._\-]+` | `Bearer [REDACTED]` |
+| `(?i)password\s*[:=]\s*\S+` | `password=[REDACTED]` |
+
+Config: `redact.emails: hash | redact | off` — default **`hash`** (sha256 prefix) in traces; **`redact`** when sending to LLM.
+
+### 9.7 Error JSON (frozen)
+
+Agent/HTTP facing body:
+
+```json
+{
+  "error": "lexshield_blocked",
+  "verdict": "BLOCK",
+  "reason": "Possible secret exposure in tool arguments",
+  "request_id": "01J...",
+  "matched_rule_id": "block-secret-exposure",
+  "retryable": false
+}
+```
+
+`error` enum: `lexshield_blocked` | `lexshield_challenged` | `lexshield_deferred` | `lexshield_config` | `lexshield_upstream`.
+
+Config `expose_rule_ids: true` default in v0.1 (devs need it); document how to set `false` for prod agent-facing surfaces.
+
+### 9.8 Performance budgets (v0.1 gate)
+
+| Path | Gate |
+|------|------|
+| Deterministic evaluate (no LLM) | p99 < **5ms** on laptop-class CI runner for 100-rule policy |
+| Policy load + compile | < **100ms** for packs shipped |
+| LLM path | timeout hard-stop **2000ms**; not a p99 gate |
+
+### 9.9 Release artifacts
+
+- PyPI: `lexshield==0.1.0`  
+- npm: `@latticeag/lexshield@0.1.0`  
+- GitHub release notes + checksums for sdist/wheel  
+- `LICENSE` MIT + `NOTICE` (LatticeAG)  
+
+### 9.10 Suggested cut order if timeboxed
+
+If scope must shrink further, cut in this order (keep product coherent):
+
+1. Keep: engine + Py SDK + CLI `check/evaluate` + baseline pack + exfil demo  
+2. Then: local API + traces  
+3. Then: challenges  
+4. Then: TS SDK + proxy  
+5. Then: other packs + LLM classifier  
+
+**Never cut:** default-deny, explainable verdicts, redaction, golden fixtures.
+
+---
+
+## 10. Intent Taxonomy
+
+### 10.1 Design Recommendations (confident)
 
 1. **Hierarchical, dot-namespaced intents**: `data.read.pii`, `infra.delete.resource`, `comms.send.external`.
 2. **Separate “benign” and “abuse” intents** where useful: `http.fetch` vs `data.exfiltrate` — abuse intents are assigned when signals suggest malice/sensitivity mismatch.
@@ -287,7 +514,7 @@ First value is fully offline. No account, no hosted dependency.
 4. **Every tool call gets ≥1 intent**; if unknown → `unknown.unclassified` with low confidence → default deny/challenge.
 5. **Multi-label allowed**: primary intent + secondary tags (e.g. involves_pii=true) — for MVP, **single primary intent + alternatives list** is enough; sensitivity as tags on the request/context.
 
-### 9.2 Classification Output Contract
+### 10.2 Classification Output Contract
 
 ```ts
 interface Classification {
@@ -300,7 +527,7 @@ interface Classification {
 }
 ```
 
-### 9.3 Built-in Categories (see Appendix B for full MVP list)
+### 10.3 Built-in Categories (see Appendix B for full MVP list)
 
 - `data.read.*` / `data.write.*` / `data.delete.*`
 - `comms.send.*` / `comms.read.*`
@@ -313,9 +540,9 @@ interface Classification {
 
 ---
 
-## 10. Classifier Architecture
+## 11. Classifier Architecture
 
-### 10.1 Pipeline Order (recommendation — agreed)
+### 11.1 Pipeline Order (recommendation — agreed)
 
 ```
 1) Deterministic (patterns, tool maps, arg schemas)     → if high confidence, stop
@@ -326,7 +553,7 @@ interface Classification {
 
 **MVP ships steps 1 and 3.** Step 2 is stub interface only.
 
-### 10.2 Deterministic Classifier
+### 11.2 Deterministic Classifier
 
 **Inputs**: tool name, arg keys/values (stringified safely), optional regex rules file.
 
@@ -354,7 +581,7 @@ patterns:
 
 **Confidence policy**: tool_map alone → 0.7; tool_map + schema validation → 0.85; pattern hit → 0.9–0.99.
 
-### 10.3 LLM Classifier
+### 11.3 LLM Classifier
 
 **Recommendation (confident):**
 
@@ -366,7 +593,7 @@ patterns:
 - Timeout: 2s default; on timeout → treat as classifier failure (see fail-closed)
 - Token budget: truncate conversation history to last N turns / M chars (defaults: 6 turns / 8k chars)
 
-### 10.4 Conflict Resolution (recommendation)
+### 11.4 Conflict Resolution (recommendation)
 
 | Situation | Resolution |
 |-----------|------------|
@@ -377,7 +604,7 @@ patterns:
 
 **“More severe”**: maintain a severity rank table on intents (1–100). Abuse/delete/exfil > read.
 
-### 10.5 Caching
+### 11.5 Caching
 
 - Key: hash(tool name + normalized JSON args + taxonomy version + classifier ids)
 - TTL: 60s default
@@ -386,14 +613,14 @@ patterns:
 
 ---
 
-## 11. Policy Language & Engine
+## 12. Policy Language & Engine
 
-### 11.1 Format
+### 12.1 Format
 
 - **Authoring**: YAML (primary), JSON (generated/API)
 - **Expressions**: CEL-inspired subset (MVP) — **recommendation: implement a small safe expression language**, not full CEL yet; document as `expression` with documented operators
 
-### 11.2 Rule Evaluation Semantics (recommendation)
+### 12.2 Rule Evaluation Semantics (recommendation)
 
 1. Compile policy at load into sorted rules by `priority` ascending (lower number = higher precedence) — **or** descending?  
    **Recommendation: higher `priority` number wins** (explicit), with stable tie-break by rule id. Document clearly. Alternative many systems use first-match; we choose **highest priority match among matching rules**, then default verdict if none match.
@@ -401,7 +628,7 @@ patterns:
 3. First/highest priority matching rule determines verdict.
 4. If no rule matches → `defaultVerdict` (recommend `BLOCK`).
 
-### 11.3 Match Dimensions (MVP)
+### 12.3 Match Dimensions (MVP)
 
 | Field | Semantics |
 |-------|-----------|
@@ -421,7 +648,7 @@ patterns:
 
 **Operators (MVP):** `== != in && || ! > >= < <= startsWith contains matches`
 
-### 11.4 Policy File Shape
+### 12.4 Policy File Shape
 
 ```yaml
 version: 1
@@ -463,13 +690,13 @@ rules:
     reason: "Possible data exfiltration or secret exposure"
 ```
 
-### 11.5 Policy Versioning
+### 12.5 Policy Versioning
 
 - Local: file content + optional `version` field; **git is source of truth**
 - `lexshield check` validates before merge
 - Future Cloud may add immutable published versions — not in first build
 
-### 11.6 Policy Packs (ship with OSS)
+### 12.6 Policy Packs (ship with OSS)
 
 1. **`packs/baseline-deny.yaml`** — default deny, allow health + metrics  
 2. **`packs/pii-guard.yaml`** — challenge/block PII egress via comms/network  
@@ -477,9 +704,9 @@ rules:
 
 ---
 
-## 12. Verdicts, Challenges & Human-in-the-Loop
+## 13. Verdicts, Challenges & Human-in-the-Loop
 
-### 12.1 Verdict Types
+### 13.1 Verdict Types
 
 | Verdict | Meaning | Execution |
 |---------|---------|-----------|
@@ -488,7 +715,7 @@ rules:
 | `CHALLENGE` | Needs human approval | Hold; notify; resume on approve/deny |
 | `DEFER` | Async review queue | Hold; no synchronous waiter required; timeout policy applies |
 
-### 12.2 Challenge Flow (recommendation)
+### 13.2 Challenge Flow (recommendation)
 
 **Local only (first build):**
 
@@ -501,7 +728,7 @@ rules:
 
 Hosted challenge UIs (dashboard / Slack) are **deferred with Cloud**.
 
-### 12.3 What Agents See on BLOCK/CHALLENGE
+### 13.3 What Agents See on BLOCK/CHALLENGE
 
 Return structured error (not only string):
 
@@ -520,9 +747,9 @@ Return structured error (not only string):
 
 ---
 
-## 13. Execution Interception & Integration Modes
+## 14. Execution Interception & Integration Modes
 
-### 13.1 Modes
+### 14.1 Modes
 
 | Mode | How it works | Best for |
 |------|--------------|----------|
@@ -530,7 +757,7 @@ Return structured error (not only string):
 | **Evaluate-only** | Caller asks for verdict, executes itself | Custom runtimes |
 | **Local proxy** | HTTP proxy `/execute` forwards if ALLOW | Polyglot / sidecars |
 
-### 13.2 Proxy Semantics (recommendation)
+### 14.2 Proxy Semantics (recommendation)
 
 - Proxy is **explicit allowlist of upstream tool endpoints** configured in `lexshield.yaml` — LexShield is not an open forwarder.
 - TLS termination local only by default (`127.0.0.1`)
@@ -538,7 +765,7 @@ Return structured error (not only string):
 - On BLOCK: HTTP 403 with structured body
 - On CHALLENGE: HTTP 202 or 403 with challenge payload — **recommendation: 403 with `verdict: CHALLENGE`** for simpler agent error handling; optional 202 behind flag
 
-### 13.3 Framework Adapters
+### 14.3 Framework Adapters
 
 **MVP**: none in core.  
 **Post-MVP contrib**: OpenAI Agents SDK, LangChain tools, CrewAI, Vercel AI SDK `tools`.  
@@ -546,9 +773,9 @@ Document a 20-line “wrap your tool” pattern so users don’t wait.
 
 ---
 
-## 14. SDKs (Python & TypeScript)
+## 15. SDKs (Python & TypeScript)
 
-### 14.1 Python (primary)
+### 15.1 Python (primary)
 
 **Package**: `lexshield` on PyPI  
 **Python**: 3.10+  
@@ -579,7 +806,7 @@ await shield.record_outcome(request_id, "EXECUTED")
 - On CHALLENGE: raise `LexShieldChallengeError` (unless await mode)
 - Propagation of `conversation_id` via contextvars helper `shield.session(...)`
 
-### 14.2 TypeScript
+### 15.2 TypeScript
 
 **Package**: `@latticeag/lexshield`  
 **Runtime**: Node 20+; edge-friendly core evaluate without Node FS (inject config)
@@ -592,7 +819,7 @@ const shield = await Shield.fromConfig('lexshield.yaml');
 export const sendEmail = shield.guard('send_email', async (args) => { ... });
 ```
 
-### 14.3 Versioning & Compatibility
+### 15.3 Versioning & Compatibility
 
 - Shared JSON schemas for Policy / Verdict / Trace in `/schemas`
 - Golden tests ensure Python and TS engines produce same verdict on fixture suite
@@ -600,7 +827,7 @@ export const sendEmail = shield.guard('send_email', async (args) => { ... });
 
 ---
 
-## 15. CLI Surface
+## 16. CLI Surface
 
 ```bash
 lexshield init                     # scaffold lexshield.yaml, policy.yaml, rules.yaml, samples
@@ -624,7 +851,7 @@ lexshield completion bash|zsh      # nice-to-have if cheap
 
 ---
 
-## 16. Local API & Proxy
+## 17. Local API & Proxy
 
 **Default bind**: `http://127.0.0.1:8787` (localhost-only by default — **do not** default to `0.0.0.0`).
 
@@ -644,7 +871,7 @@ lexshield completion bash|zsh      # nice-to-have if cheap
 
 ---
 
-## 17. Deferred: LexShield Cloud
+## 18. Deferred: LexShield Cloud
 
 **Status: out of scope for the first build.**
 
@@ -660,7 +887,7 @@ Until then: policies and traces stay on the user’s machine / git / their own s
 
 ---
 
-## 18. Data Model
+## 19. Data Model
 
 ```ts
 type VerdictType = 'ALLOW' | 'BLOCK' | 'CHALLENGE' | 'DEFER';
@@ -800,9 +1027,9 @@ interface UpstreamConfig {
 
 ---
 
-## 19. Configuration Schema
+## 20. Configuration Schema
 
-### 19.1 `lexshield.yaml` (canonical)
+### 20.1 `lexshield.yaml` (canonical)
 
 ```yaml
 version: 1
@@ -837,7 +1064,7 @@ server:
   token_env: LEXSHIELD_LOCAL_TOKEN
 ```
 
-### 19.2 Environment Variables
+### 20.2 Environment Variables
 
 | Var | Purpose |
 |-----|---------|
@@ -848,7 +1075,7 @@ server:
 
 ---
 
-## 20. Architecture & Request Pipeline
+## 21. Architecture & Request Pipeline
 
 ```
 ┌─────────────────┐      ┌──────────────────────────────┐      ┌─────────────────┐
@@ -864,7 +1091,7 @@ server:
 
 No hosted control plane in the request path for the first build.
 
-### 20.1 Per-request steps
+### 21.1 Per-request steps
 
 1. Accept `ToolCallRequest` (generate id if missing — **recommendation: ULID**)
 2. Validate schema; reject malformed with 400
@@ -878,7 +1105,7 @@ No hosted control plane in the request path for the first build.
 
 ---
 
-## 21. Performance, Caching & Reliability
+## 22. Performance, Caching & Reliability
 
 | Path | Target |
 |------|--------|
@@ -896,9 +1123,9 @@ No hosted control plane in the request path for the first build.
 
 ---
 
-## 22. Security & Threat Model
+## 23. Security & Threat Model
 
-### 22.1 Trust Boundaries
+### 23.1 Trust Boundaries
 
 | Boundary | Trust assumption |
 |----------|------------------|
@@ -907,7 +1134,7 @@ No hosted control plane in the request path for the first build.
 | LLM provider | Sees redacted args; treat as semi-trusted |
 | Local server | Localhost by default; token optional |
 
-### 22.2 Threats & Mitigations
+### 23.2 Threats & Mitigations
 
 | Threat | Mitigation |
 |--------|------------|
@@ -920,13 +1147,13 @@ No hosted control plane in the request path for the first build.
 | Cost amplification via LLM classify | Cache, timeouts, circuit breaker, optional `llm: false` for hot tools |
 | Confused deputy | Bind shields to env + caller roles in policy |
 
-### 22.3 Security Guarantees (honest)
+### 23.3 Security Guarantees (honest)
 
 LexShield **cannot** guarantee safety against all adversarial prompts. It **does** provide defense-in-depth, auditability, and policy enforcement points.
 
 ---
 
-## 23. Privacy, Compliance & Data Handling
+## 24. Privacy, Compliance & Data Handling
 
 **Recommendations:**
 
@@ -938,14 +1165,14 @@ LexShield **cannot** guarantee safety against all adversarial prompts. It **does
 
 ---
 
-## 24. Observability & Audit
+## 25. Observability & Audit
 
-### 24.1 Traces
+### 25.1 Traces
 
 - Every evaluate produces a Trace (Appendix C)
 - Local: NDJSON; optional HTTP/OTLP export to the user’s stack
 
-### 24.2 Metrics (local counters)
+### 25.2 Metrics (local counters)
 
 - `lexshield_evaluations_total{verdict}`
 - `lexshield_classify_duration_ms{classifier}`
@@ -953,19 +1180,19 @@ LexShield **cannot** guarantee safety against all adversarial prompts. It **does
 - `lexshield_sink_errors_total`
 - `lexshield_llm_circuit_open`
 
-### 24.3 OpenTelemetry
+### 25.3 OpenTelemetry
 
 - Emit span `lexshield.evaluate` with attributes: tool, intent, verdict, rule id, duration
 - Export via OTLP/HTTP sink config
 
-### 24.4 Alerts
+### 25.4 Alerts
 
 - Not built-in for first build — users alert off their own log/OTLP pipeline
 - Optional: document a sample Grafana/Datadog query on OTLP attributes
 
 ---
 
-## 25. Error Handling & Failure Modes
+## 26. Error Handling & Failure Modes
 
 | Failure | Default behavior |
 |---------|------------------|
@@ -982,9 +1209,9 @@ LexShield **cannot** guarantee safety against all adversarial prompts. It **does
 
 ---
 
-## 26. Testing Strategy
+## 27. Testing Strategy
 
-### 26.1 Layers
+### 27.1 Layers
 
 1. **Unit**: expression parser, glob match, redaction, priority resolution  
 2. **Golden fixtures**: JSON request + policy → expected verdict (shared Py/TS)  
@@ -993,21 +1220,21 @@ LexShield **cannot** guarantee safety against all adversarial prompts. It **does
 5. **CLI**: snapshot tests for `check`/`evaluate`  
 6. **Contract/security**: org isolation N/A until Cloud; focus on redaction + fail-closed tests
 
-### 26.2 Security regression fixtures (must-have)
+### 27.2 Security regression fixtures (must-have)
 
 - Exfil via `send_email` with PII body  
 - `http_request` to suspicious host  
 - Delete in production without challenge  
 - Benign health check still ALLOW  
 
-### 26.3 CI
+### 27.3 CI
 
 - Lint + typecheck + unit + golden on every PR  
 - No live LLM calls in CI (cassettes only)
 
 ---
 
-## 27. Repository & Monorepo Layout
+## 28. Repository & Monorepo Layout
 
 **Recommendation: monorepo** (pnpm or uv workspace + cargo later):
 
@@ -1034,7 +1261,7 @@ LexShield **cannot** guarantee safety against all adversarial prompts. It **does
 
 ---
 
-## 28. Tech Stack Recommendations
+## 29. Tech Stack Recommendations
 
 | Area | Choice | Rationale |
 |------|--------|-----------|
@@ -1050,9 +1277,9 @@ LexShield **cannot** guarantee safety against all adversarial prompts. It **does
 
 ---
 
-## 29. Developer Experience & Documentation
+## 30. Developer Experience & Documentation
 
-### 29.1 Must-have docs (first build)
+### 30.1 Must-have docs (first build)
 
 1. Quickstart (5 minutes)  
 2. Policy authoring guide  
@@ -1061,43 +1288,43 @@ LexShield **cannot** guarantee safety against all adversarial prompts. It **does
 5. Security model & limitations  
 6. CI example (`lexshield check` in GitHub Actions)
 
-### 29.2 Examples
+### 30.2 Examples
 
 - Minimal Python tool guard  
 - Block exfil demo  
 - Challenge flow demo  
 - CI `lexshield check` in GitHub Actions  
 
-### 29.3 Telemetry (OSS)
+### 30.3 Telemetry (OSS)
 
-**Recommendation:** Opt-in anonymous usage (`lexshield telemetry enable`) — off by default. Never send args/traces. Can ship after first public tag; not required for M1–M5.
+**v0.1: none.** No phone-home. Revisit opt-in anonymous telemetry in v0.2.
 
 ---
 
-## 30. Go-to-Market (OSS)
+## 31. Go-to-Market (OSS)
 
 **First build is free MIT OSS. No pricing page, no seats, no Cloud tiers.**
 
-### 30.1 Launch motion
+### 31.1 Launch motion
 
 1. Public GitHub repo + clear README/quickstart  
 2. Post to agent/security communities (HN, relevant Discords, X)  
 3. Content: “OPA for agent tools” + demo GIFs of block/challenge  
 4. Collect design-partner feedback via GitHub Issues / Discord  
 
-### 30.2 Design Partner Profile
+### 31.2 Design Partner Profile
 
 - Already running agents with ≥3 production tools  
 - Has a security/platform owner  
 - Willing to share anonymized false-positive feedback  
 
-### 30.3 Monetization
+### 31.3 Monetization
 
 Deferred. Revisit Cloud/support only after OSS traction and clear demand for hosted control plane.
 
 ---
 
-## 31. MVP Milestones (OSS First Build)
+## 32. MVP Milestones (OSS First Build)
 
 > Sequenced work packages with hard deliverables. No Cloud milestone.
 
@@ -1108,13 +1335,13 @@ Deferred. Revisit Cloud/support only after OSS traction and clear demand for hos
 | **M3** | LLM classifier + taxonomy | OpenAI-compatible classify, built-in intents, redaction | Cassette-tested classify |
 | **M4** | CLI + traces + challenges | `init/check/run/evaluate/traces/challenge`, NDJSON sink | 5-min quickstart works offline |
 | **M5** | TypeScript SDK + proxy | npm package, `/execute` proxy, shared fixtures parity | Same golden verdicts |
-| **M6** | Docs, packs, examples, polish | Policy packs, examples, README, security docs, CI action | Public-ready OSS tag `v0.1.0` |
+| **M6** | Docs, packs, examples, polish | Packs YAML, 3 demos, README, security docs, CI example, Appendix D checklist | Tag `v0.1.0` green |
 
-**Parallelization note:** Docs and examples written continuously from M2; M6 is hardening, not starting docs from zero.
+**Authoritative scope:** [§9 Feature Freeze](#9-v01-feature-freeze-specific). If a feature is not IN there, do not build it in these milestones.
 
 ---
 
-## 32. Post-MVP Roadmap
+## 33. Post-MVP Roadmap
 
 ### After OSS v0.1
 
@@ -1131,7 +1358,7 @@ Deferred. Revisit Cloud/support only after OSS traction and clear demand for hos
 
 ---
 
-## 33. Open Questions (with Recommendations)
+## 34. Open Questions (with Recommendations)
 
 | # | Question | Recommendation | Confidence |
 |---|----------|----------------|------------|
@@ -1159,29 +1386,32 @@ Deferred. Revisit Cloud/support only after OSS traction and clear demand for hos
 
 ---
 
-## 34. Decision Log
+## 35. Decision Log
 
 | Decision | Recommendation | Status |
 |----------|----------------|--------|
 | First build shape | **OSS only** — no SaaS | **Locked** |
+| v0.1 feature set | §9 freeze (IN/OUT/demos/packs) | **Locked** |
+| Intent catalog size | **24** built-ins | **Locked** |
+| Challenge SDK default | Raise; no await | **Locked** |
+| Proxy deny status | HTTP **403** for BLOCK/CHALLENGE/DEFER | **Locked** |
+| Telemetry in v0.1 | **None** (defer opt-in to v0.2) | **Locked** |
 | Primary languages | Python first, TypeScript second | **Agreed** |
-| Classifier fallback | Deterministic → (embedding later) → LLM | **Agreed** |
+| Classifier fallback | Deterministic → LLM (embed later) | **Agreed** |
 | Default verdict posture | `BLOCK` (default-deny) | **Agreed** |
 | License | MIT | **Agreed** |
 | LexShield Cloud | Deferred post-OSS | **Locked** |
-| Framework adapters in core | No; contrib after v0.1 | **Recommended** |
-| LLM classifier | Remote OpenAI-compatible first | **Recommended** |
+| Framework adapters in core | No | **Locked** |
+| LLM classifier | OpenAI-compatible; 2s timeout; `gpt-4o-mini` default | **Locked** |
 | Shared evaluation core | Fixtures now; WASM later | **Recommended** |
-| Local server default host | `127.0.0.1` only | **Recommended** |
-| Trace args default | Redacted | **Recommended** |
-| CLI implementation language | Python/Typer | **Recommended** |
-| Expression language | Safe subset, not full CEL | **Recommended** |
-| OSS telemetry | Opt-in, off by default; optional post-v0.1 | **Recommended** |
-| Challenge SDK behavior | Raise by default; opt-in await | **Recommended** |
+| Local server default host | `127.0.0.1` only | **Locked** |
+| Trace args default | Redacted | **Locked** |
+| CLI language | Python/Typer | **Locked** |
+| Expression language | Frozen subset §9.5 | **Locked** |
 
 ---
 
-## 35. Build Readiness
+## 36. Build Readiness
 
 ### Verdict: **Yes — ready to build the OSS MVP.**
 
@@ -1216,29 +1446,192 @@ The problem, scope, API shapes, data model, milestones, and fail-closed defaults
 
 ## Appendix A — Example Policy Packs
 
-### A.1 Baseline deny (sketch)
+> Full YAML below is **normative for v0.1** (may tweak reason strings, not semantics).
 
-- Default `BLOCK`
-- ALLOW: `health_check`, `get_time`, metrics scrape tools
-- CHALLENGE: any `*.delete.*` in `production`
-- BLOCK: `data.exfiltrate`, `security.secret_exposure`
+### A.1 `baseline-deny`
 
-### A.2 PII guard (sketch)
+```yaml
+version: 1
+id: baseline-deny
+name: Baseline default-deny
+description: Allow health/ping only; challenge prod deletes; block secret exposure and exfil.
+defaultVerdict: BLOCK
+rules:
+  - id: allow-health
+    name: Allow health checks
+    priority: 100
+    match:
+      tools: ["health_check", "ping"]
+      intents: ["network.request.health"]
+    verdict: ALLOW
+    reason: "Health checks are always allowed"
 
-- Tag requests with `data_class=pii` from caller
-- BLOCK `comms.send.*` when `tags.data_class=pii` and recipient external
-- CHALLENGE `network.request.http` when args URL not in allowlist host set
+  - id: challenge-delete-prod
+    name: Challenge destructive actions in production
+    priority: 200
+    match:
+      environments: ["production"]
+      intents: ["infra.delete.resource", "data.delete.record"]
+    verdict: CHALLENGE
+    reason: "Destructive action in production requires approval"
+    challenge:
+      channel: stdout
+      timeoutSeconds: 3600
+      onTimeout: BLOCK
 
-### A.3 Change window (sketch)
+  - id: block-secret-exposure
+    name: Block secret exposure
+    priority: 300
+    match:
+      intents: ["security.secret_exposure"]
+    verdict: BLOCK
+    reason: "Possible secret exposure in tool arguments"
 
-- ALLOW `infra.mutate.*` only when `tags.change_ticket` present and `environment!=production` OR maintenance tag set
-- Otherwise CHALLENGE
+  - id: block-exfil
+    name: Block exfiltration
+    priority: 300
+    match:
+      intents: ["data.exfiltrate"]
+    verdict: BLOCK
+    reason: "Possible data exfiltration"
+```
+
+### A.2 `pii-guard`
+
+```yaml
+version: 1
+id: pii-guard
+name: PII egress guard
+description: Extends baseline; challenges external comms when tagged pii; blocks non-allowlisted HTTP.
+defaultVerdict: BLOCK
+rules:
+  - id: allow-health
+    priority: 100
+    match:
+      tools: ["health_check", "ping"]
+      intents: ["network.request.health"]
+    verdict: ALLOW
+    reason: "Health checks are always allowed"
+
+  - id: challenge-pii-email
+    priority: 220
+    match:
+      intents: ["comms.send.email", "comms.send.external"]
+      tags:
+        data_class: ["pii"]
+    verdict: CHALLENGE
+    reason: "Sending PII requires approval"
+    challenge:
+      channel: stdout
+      timeoutSeconds: 3600
+      onTimeout: BLOCK
+
+  - id: block-http-non-allowlist
+    priority: 250
+    match:
+      intents: ["network.request.http"]
+      expression: '!(args.url startsWith "https://api.mycompany.com/")'
+    verdict: BLOCK
+    reason: "HTTP to non-allowlisted host"
+
+  - id: block-secret-exposure
+    priority: 300
+    match:
+      intents: ["security.secret_exposure"]
+    verdict: BLOCK
+    reason: "Possible secret exposure in tool arguments"
+
+  - id: block-exfil
+    priority: 300
+    match:
+      intents: ["data.exfiltrate"]
+    verdict: BLOCK
+    reason: "Possible data exfiltration"
+```
+
+### A.3 `change-window`
+
+```yaml
+version: 1
+id: change-window
+name: Infra change window
+description: Infra mutate/provision in production requires change_ticket tag; otherwise challenge.
+defaultVerdict: BLOCK
+rules:
+  - id: allow-health
+    priority: 100
+    match:
+      tools: ["health_check", "ping"]
+      intents: ["network.request.health"]
+    verdict: ALLOW
+    reason: "Health checks are always allowed"
+
+  - id: allow-infra-with-ticket
+    priority: 180
+    match:
+      environments: ["production"]
+      intents: ["infra.mutate.resource", "infra.provision.resource"]
+      expression: 'tags.change_ticket != ""'
+    verdict: ALLOW
+    reason: "Change ticket present"
+
+  - id: challenge-infra-prod
+    priority: 200
+    match:
+      environments: ["production"]
+      intents: ["infra.mutate.resource", "infra.provision.resource", "infra.delete.resource"]
+    verdict: CHALLENGE
+    reason: "Production infra change requires approval"
+    challenge:
+      channel: stdout
+      timeoutSeconds: 3600
+      onTimeout: BLOCK
+
+  - id: block-secret-exposure
+    priority: 300
+    match:
+      intents: ["security.secret_exposure"]
+    verdict: BLOCK
+    reason: "Possible secret exposure in tool arguments"
+```
+
+### A.4 Companion `rules.yaml` (deterministic) — ship with `init`
+
+```yaml
+version: 1
+tool_map:
+  health_check: network.request.health
+  ping: network.request.health
+  send_email: comms.send.email
+  send_slack: comms.send.slack
+  http_request: network.request.http
+  execute_sql: data.query.sql
+  delete_resource: infra.delete.resource
+  create_resource: infra.provision.resource
+  update_resource: infra.mutate.resource
+  create_charge: finance.charge.create
+  transfer_funds: finance.transfer.create
+  run_shell: code.execute.shell
+  write_file: code.write.repo
+patterns:
+  - name: aws_access_key
+    match:
+      any_arg_regex: "AKIA[0-9A-Z]{16}"
+    intent: security.secret_exposure
+    confidence: 0.98
+  - name: openai_sk
+    match:
+      any_arg_regex: "sk-(proj-)?[a-zA-Z0-9]{20,}"
+    intent: security.secret_exposure
+    confidence: 0.98
+```
 
 ---
 
-## Appendix B — Built-in Intent Catalog (MVP)
+## Appendix B — Built-in Intent Catalog (v0.1)
 
-> Final list may trim to ~30. Severity 1–100.
+> **Frozen at 24 intents** for `v0.1.0`. Severity 1–100.  
+> Users extend via `custom.<name>` in `taxonomy.yaml` (not listed here).
 
 | Intent | Severity | Description |
 |--------|----------|-------------|
@@ -1250,6 +1643,7 @@ The problem, scope, API shapes, data model, milestones, and fail-closed defaults
 | `data.write.record` | 45 | Create/update records |
 | `data.delete.record` | 75 | Delete data |
 | `data.exfiltrate` | 95 | Suspected exfiltration |
+| `comms.read.inbox` | 35 | Read messages/inbox |
 | `comms.send.email` | 50 | Send email |
 | `comms.send.slack` | 40 | Send Slack/chat |
 | `comms.send.external` | 70 | Message external party |
@@ -1266,8 +1660,6 @@ The problem, scope, API shapes, data model, milestones, and fail-closed defaults
 | `security.secret_exposure` | 98 | Secrets in args/egress |
 | `unknown.unclassified` | 50 | Fallback |
 
-Customers add `custom.<name>` in taxonomy.
-
 ---
 
 ## Appendix C — Trace Event Schema
@@ -1283,23 +1675,55 @@ NDJSON line (logical):
     "id": "01J...",
     "caller": {"id": "agent-1", "type": "agent", "roles": ["support"]},
     "tool": {"name": "send_email"},
-    "arguments_redacted": {"to": "a@b.com", "subject": "…", "body": "[REDACTED]"},
+    "arguments_redacted": {"to": "a@b.com", "subject": "…", "body": "[REDACTED_AWS_KEY]"},
     "context": {"environment": "production", "conversationId": "c1"}
   },
   "classifications": [
-    {"intent": "comms.send.email", "confidence": 0.82, "classifier": "deterministic:v1", "alternatives": []}
+    {"intent": "security.secret_exposure", "confidence": 0.98, "classifier": "deterministic:v1", "alternatives": []}
   ],
   "verdict": {
     "decision": "BLOCK",
-    "matchedRuleId": "block-exfil",
-    "reason": "Possible data exfiltration or secret exposure",
+    "matchedRuleId": "block-secret-exposure",
+    "reason": "Possible secret exposure in tool arguments",
     "durationMs": 3,
-    "policyVersion": "v3"
+    "policyVersion": "1"
   },
   "outcome": "BLOCKED",
   "outcomeAt": "2026-07-11T12:00:00.003Z"
 }
 ```
+
+---
+
+## Appendix D — v0.1 Acceptance Checklist
+
+Ship `v0.1.0` only when all boxes pass:
+
+**Engine**
+- [ ] Default-deny packs block unknown tools
+- [ ] Highest priority rule wins; golden fixtures ≥ 50 green on Python
+- [ ] Deterministic secret pattern → `security.secret_exposure` → BLOCK
+- [ ] LLM path cassette-tested; timeout 2s; no key → skip LLM cleanly
+- [ ] Redaction applied to LLM payload and NDJSON traces
+
+**Python SDK + API + CLI**
+- [ ] `@shield.guard` raises on BLOCK/CHALLENGE
+- [ ] `lexshield init && check && evaluate` works offline
+- [ ] `/evaluate` + `/execute` + `/traces` + challenge resolve work on 127.0.0.1:8787
+- [ ] Bind-all refused without explicit flag
+
+**TS**
+- [ ] Golden fixtures 100% match Python decisions
+- [ ] `evaluate` + `guard` documented example passes
+
+**Content / docs**
+- [ ] 3 packs + 3 demos runnable without API key
+- [ ] README 5-minute quickstart verified on clean machine
+- [ ] `docs/security.md` states probabilistic limits honestly
+
+**Release**
+- [ ] PyPI + npm 0.1.0 published from tag
+- [ ] MIT LICENSE present
 
 ---
 
@@ -1309,7 +1733,8 @@ NDJSON line (logical):
 |---------|------|-------|
 | 0.1 | 2026-07-11 | Initial SPEC committed to main |
 | 0.2 | 2026-07-11 | Expanded planning SPEC |
-| 0.3 | 2026-07-11 | **OSS-first lock**: SaaS/Cloud removed from first build; M6 = docs/polish; build-readiness = go |
+| 0.3 | 2026-07-11 | OSS-first lock; SaaS deferred |
+| 0.4 | 2026-07-11 | **v0.1 feature freeze**: exact IN/OUT, demos, expressions, redaction, packs YAML, acceptance checklist |
 
 ---
 
