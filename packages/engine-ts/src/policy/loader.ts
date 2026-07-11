@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { parse as parseYaml } from 'yaml';
 
@@ -22,6 +23,17 @@ function normalizePolicyData(data: Record<string, unknown>): Record<string, unkn
   }
 
   return normalized;
+}
+
+export function loadPolicyFromFileSync(path: string): Policy {
+  let raw: string;
+  try {
+    raw = readFileSync(path, 'utf8');
+  } catch (error) {
+    throw new LexShieldConfigError(`Failed to read policy file: ${path}`, { cause: error });
+  }
+
+  return loadPolicyFromString(raw, path);
 }
 
 export async function loadPolicyFromFile(path: string): Promise<Policy> {

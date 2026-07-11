@@ -155,6 +155,7 @@ export type Trace = z.infer<typeof TraceSchema>;
 
 export const SinkConfigSchema = z.object({
   type: z.enum(['stdout', 'file', 'http', 'otlp']),
+  path: z.string().optional(),
   options: z.record(z.unknown()).default({}),
 });
 export type SinkConfig = z.infer<typeof SinkConfigSchema>;

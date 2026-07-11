@@ -17,9 +17,23 @@ export {
   type RedactionOptions,
 } from './redaction.js';
 
-export { Shield, type EvaluateInput, type GuardOptions, type ShieldOptions } from './shield.js';
+export { LocalApiClient, type EvaluateApiInput, type LocalApiClientOptions } from './client.js';
 
-export { loadPolicyFromFile, loadPolicyFromString, loadPolicyFromData, resolvePolicyPath } from './policy/loader.js';
+export {
+  Shield,
+  ShieldSession,
+  type EvaluateInput,
+  type GuardOptions,
+  type ShieldOptions,
+} from './shield.js';
+
+export {
+  loadPolicyFromFile,
+  loadPolicyFromFileSync,
+  loadPolicyFromString,
+  loadPolicyFromData,
+  resolvePolicyPath,
+} from './policy/loader.js';
 export { evaluatePolicy, type PolicyEvaluationInput } from './policy/engine.js';
 export { Expression, ExpressionError, buildExpressionBindings } from './policy/expressions.js';
 
@@ -28,7 +42,29 @@ export {
   loadDeterministicRulesFromFile,
   loadDeterministicRulesFromString,
 } from './classifiers/deterministic.js';
-export { runClassifierPipeline, type ClassifierPipelineOptions } from './classifiers/pipeline.js';
+export { LLMClassifier, type LLMClassifierOptions } from './classifiers/llm.js';
+export {
+  ClassifierPipeline,
+  runClassifierPipeline,
+  mergeClassifications,
+  clearClassificationCache,
+  DETERMINISTIC_SKIP_LLM_THRESHOLD,
+  UNKNOWN_INTENT,
+  CACHE_TTL_MS,
+  type ClassifierPipelineOptions,
+} from './classifiers/pipeline.js';
+
+export {
+  BUILTIN_INTENT_SEVERITY,
+  BUILTIN_TAXONOMY_VERSION,
+  builtinTaxonomy,
+  getIntentSeverity,
+  mergeTaxonomy,
+  type Taxonomy,
+} from './taxonomy.js';
+
+export { NDJSONTraceSink } from './traces/sink.js';
+export { ChallengeStore, type ChallengeRecord } from './challenges/store.js';
 
 export {
   CallerSchema,

@@ -5,14 +5,13 @@ import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 import { describe, expect, it } from 'vitest';
 
-import { classifyDeterministic, loadDeterministicRulesFromFile } from '../src/classifiers/deterministic.js';
+import { ClassifierPipeline, UNKNOWN_INTENT } from '../src/classifiers/pipeline.js';
 import { evaluatePolicy } from '../src/policy/engine.js';
 import { loadPolicyFromData, loadPolicyFromFile } from '../src/policy/loader.js';
 import { ToolCallRequestSchema, type Policy, type ToolCallRequest } from '../src/types.js';
 
 const workspaceRoot = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
 const fixturesRoot = join(workspaceRoot, 'fixtures', 'golden');
-const UNKNOWN_INTENT = 'unknown.unclassified';
 
 interface PolicyRef {
   pack?: string;
@@ -92,33 +91,11 @@ async function classificationsForRequest(
   request: ToolCallRequest,
   rulesPath: string | null,
 ) {
-  if (!rulesPath) {
-    return [
-      {
-        intent: UNKNOWN_INTENT,
-        confidence: 0.5,
-        alternatives: [],
-        classifier: 'deterministic:v1',
-        reasoning: 'No deterministic classification',
-      },
-    ];
-  }
+  const pipeline = rulesPath
+    ? await ClassifierPipeline.fromRulesPath(rulesPath, { llmEnabled: false })
+    : new ClassifierPipeline({ llmEnabled: false });
 
-  const rules = await loadDeterministicRulesFromFile(rulesPath);
-  const result = classifyDeterministic(request, { rules });
-  if (result) {
-    return [result];
-  }
-
-  return [
-    {
-      intent: UNKNOWN_INTENT,
-      confidence: 0.5,
-      alternatives: [],
-      classifier: 'deterministic:v1',
-      reasoning: 'No deterministic classification',
-    },
-  ];
+  return pipeline.classify(request);
 }
 
 async function loadGoldenScenario(scenario: string) {
@@ -147,7 +124,7 @@ async function loadGoldenScenario(scenario: string) {
 describe('golden fixtures', () => {
   it('discovers fixture scenarios', async () => {
     const scenarios = await listGoldenScenarios();
-    expect(scenarios.length).toBeGreaterThan(0);
+    expect(scenarios.length).toBeGreaterThanOrEqual(10);
   });
 
   it('matches Python verdicts for all fixtures', async () => {
@@ -171,5 +148,18 @@ describe('golden fixtures', () => {
         );
       }
     }
+  });
+
+  it('uses unknown.unclassified fallback with confidence 0.5', async () => {
+    const scenarios = await listGoldenScenarios();
+    const unknownScenario = scenarios.find((name) => name.includes('unknown'));
+    if (!unknownScenario) {
+      return;
+    }
+
+    const result = await loadGoldenScenario(unknownScenario);
+    const primary = result.verdict.classifications[0];
+    expect(primary?.intent).toBe(UNKNOWN_INTENT);
+    expect(primary?.confidence).toBe(0.5);
   });
 });
