@@ -1,15 +1,15 @@
-"""FastAPI local API — SPEC §9 routes (stubbed)."""
+"""FastAPI local API — SPEC §9 routes."""
 
 from __future__ import annotations
 
 import os
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from lexshield.challenges.store import ChallengeStore
 from lexshield.models import ToolCallRequest, VerdictType
+from lexshield.server.proxy import UpstreamForwardError
 from lexshield.shield import Shield
 
 _bearer = HTTPBearer(auto_error=False)
@@ -29,7 +29,6 @@ def create_app(shield: Shield | None = None) -> FastAPI:
     """Create the LexShield FastAPI application."""
     app = FastAPI(title="LexShield", version="0.1.0")
     app.state.shield = shield
-    app.state.challenge_store = ChallengeStore()
     app.state.policy_loaded = shield is not None
 
     @app.get("/healthz")
@@ -62,29 +61,28 @@ def create_app(shield: Shield | None = None) -> FastAPI:
     )
     async def execute(shield_id: str, body: ToolCallRequest) -> dict[str, Any]:
         active = _get_shield(app, shield_id)
-        verdict = await active.evaluate(
-            tool=body.tool.name,
-            arguments=body.arguments,
-            caller=body.caller,
-            context=body.context,
-            request_id=body.id,
-        )
+        try:
+            verdict, result = await active.execute_upstream(
+                tool=body.tool.name,
+                arguments=body.arguments,
+                caller=body.caller,
+                context=body.context,
+                request_id=body.id,
+            )
+        except UpstreamForwardError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail={"error": "lexshield_upstream_error", "message": exc.message},
+            ) from exc
+
         if verdict.decision != VerdictType.ALLOW:
             raise HTTPException(
                 status_code=403,
-                detail={
-                    "error": _error_code(verdict.decision),
-                    "verdict": verdict.decision.value,
-                    "reason": verdict.reason,
-                    "request_id": verdict.request_id,
-                    "matched_rule_id": verdict.matched_rule_id,
-                    "retryable": False,
-                },
+                detail=_denied_detail(verdict),
             )
         return {
             "verdict": verdict.model_dump(by_alias=True),
-            "executed": False,
-            "message": "Execute stub — upstream forwarding not implemented",
+            "result": result,
         }
 
     @app.get(
@@ -103,9 +101,9 @@ def create_app(shield: Shield | None = None) -> FastAPI:
         active = _get_shield(app, shield_id)
         try:
             active.reload_policy()
-            return {"status": "reloaded"}
         except Exception as exc:
             return {"status": "failed", "message": str(exc)}
+        return {"status": "reloaded"}
 
     @app.get("/v1/traces", dependencies=[Depends(_require_token)])
     async def list_traces(
@@ -115,29 +113,24 @@ def create_app(shield: Shield | None = None) -> FastAPI:
         limit: int = 50,
         offset: int = 0,
     ) -> dict[str, Any]:
-        active: Shield = app.state.shield
+        active: Shield | None = app.state.shield
         if active is None or active.trace_sink is None:
             return {"traces": [], "total": 0}
-        traces = active.trace_sink.read_all(limit=limit, offset=offset)
-        filtered = []
-        for trace in traces:
-            verdict = trace.get("verdict", {})
-            request = trace.get("request", {})
-            if decision and verdict.get("decision") != decision:
-                continue
-            if tool and request.get("tool", {}).get("name") != tool:
-                continue
-            if intent:
-                classifications = trace.get("classifications", [])
-                if not any(c.get("intent") == intent for c in classifications):
-                    continue
-            filtered.append(trace)
-        return {"traces": filtered, "total": len(filtered)}
+        traces, total = active.trace_sink.read_filtered(
+            decision=decision,
+            tool=tool,
+            intent=intent,
+            limit=limit,
+            offset=offset,
+        )
+        return {"traces": traces, "total": total}
 
     @app.get("/v1/challenges", dependencies=[Depends(_require_token)])
     async def list_challenges() -> dict[str, Any]:
-        store: ChallengeStore = app.state.challenge_store
-        return {"challenges": store.list_open()}
+        active = _get_shield_or_none(app)
+        if active is None:
+            return {"challenges": []}
+        return {"challenges": active.challenge_store.list_open()}
 
     @app.post(
         "/v1/challenges/{challenge_id}/resolve",
@@ -147,17 +140,38 @@ def create_app(shield: Shield | None = None) -> FastAPI:
         challenge_id: str,
         body: dict[str, str],
     ) -> dict[str, Any]:
-        store: ChallengeStore = app.state.challenge_store
+        active = _get_shield_for_challenges(app)
         decision = body.get("decision", "")
         actor = body.get("actor", "api")
         if decision not in ("approve", "deny"):
             raise HTTPException(status_code=400, detail="decision must be approve or deny")
-        record = store.resolve(challenge_id, decision=decision, actor=actor)
+        record = active.challenge_store.resolve(
+            challenge_id, decision=decision, actor=actor
+        )
         if record is None:
             raise HTTPException(status_code=404, detail="Challenge not found")
         return record
 
     return app
+
+
+def configure_app(shield: Shield) -> FastAPI:
+    """Wire a Shield into the module-level app instance."""
+    app.state.shield = shield
+    app.state.policy_loaded = True
+    return app
+
+
+def _get_shield_or_none(app: FastAPI) -> Shield | None:
+    shield: Shield | None = app.state.shield
+    return shield
+
+
+def _get_shield_for_challenges(app: FastAPI) -> Shield:
+    active: Shield | None = app.state.shield
+    if active is None:
+        raise HTTPException(status_code=503, detail="Shield not configured")
+    return active
 
 
 def _get_shield(app: FastAPI, shield_id: str) -> Shield:
@@ -169,6 +183,17 @@ def _get_shield(app: FastAPI, shield_id: str) -> Shield:
     return active
 
 
+def _denied_detail(verdict: Any) -> dict[str, Any]:
+    return {
+        "error": _error_code(verdict.decision),
+        "verdict": verdict.decision.value,
+        "reason": verdict.reason,
+        "request_id": verdict.request_id,
+        "matched_rule_id": verdict.matched_rule_id,
+        "retryable": False,
+    }
+
+
 def _error_code(decision: VerdictType) -> str:
     mapping = {
         VerdictType.BLOCK: "lexshield_blocked",
@@ -176,3 +201,6 @@ def _error_code(decision: VerdictType) -> str:
         VerdictType.DEFER: "lexshield_deferred",
     }
     return mapping.get(decision, "lexshield_blocked")
+
+
+app = create_app(None)

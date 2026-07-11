@@ -1,0 +1,6 @@
+{
+  "decision": "ALLOW",
+  "matchedRuleId": "allow-staging-delete",
+  "reason": "Non-production deletes are allowed",
+  "primaryIntent": "infra.delete.resource"
+}

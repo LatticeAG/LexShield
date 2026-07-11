@@ -1,0 +1,6 @@
+{
+  "decision": "ALLOW",
+  "matchedRuleId": "allow-send-tools",
+  "reason": "Send tools are allowed",
+  "primaryIntent": "comms.send.slack"
+}

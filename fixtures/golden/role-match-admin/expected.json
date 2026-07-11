@@ -1,0 +1,6 @@
+{
+  "decision": "ALLOW",
+  "matchedRuleId": "allow-admin",
+  "reason": "Admin role permitted for destructive actions",
+  "primaryIntent": "infra.delete.resource"
+}

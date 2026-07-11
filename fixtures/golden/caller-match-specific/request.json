@@ -1,0 +1,16 @@
+{
+  "id": "01JFIXTURECALLERMATCH01",
+  "shieldId": "local",
+  "timestamp": "2026-07-11T12:00:00.000Z",
+  "caller": {
+    "id": "ci-bot",
+    "type": "service_account"
+  },
+  "tool": {
+    "name": "health_check"
+  },
+  "arguments": {},
+  "context": {
+    "environment": "production"
+  }
+}

@@ -1,0 +1,14 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: default-allow-policy
+  name: Default allow with explicit block
+  defaultVerdict: ALLOW
+  rules:
+    - id: block-shell
+      name: Block shell execution
+      priority: 300
+      match:
+        intents: ["code.execute.shell"]
+      verdict: BLOCK
+      reason: "Shell execution is blocked"

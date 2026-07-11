@@ -1,0 +1,3 @@
+pack: pii-guard
+policy: ../../../packs/pii-guard/policy.yaml
+rules: ../../../packs/pii-guard/rules.yaml

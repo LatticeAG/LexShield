@@ -1,0 +1,6 @@
+{
+  "decision": "BLOCK",
+  "matchedRuleId": "block-shell",
+  "reason": "Shell execution is blocked",
+  "primaryIntent": "code.execute.shell"
+}

@@ -1,0 +1,15 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: expression-gmail-block
+  name: Gmail block expression fixture
+  defaultVerdict: BLOCK
+  rules:
+    - id: block-gmail-prod
+      name: Block Gmail recipients in production
+      priority: 250
+      match:
+        intents: ["comms.send.email"]
+        expression: 'env == "production" && args.to contains "@gmail.com"'
+      verdict: BLOCK
+      reason: "Gmail not allowed in production"

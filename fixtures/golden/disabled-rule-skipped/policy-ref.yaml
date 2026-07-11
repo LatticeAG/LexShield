@@ -1,0 +1,16 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: disabled-rule-skipped
+  name: Disabled rule skipped fixture
+  defaultVerdict: BLOCK
+  rules:
+    - id: disabled-allow-health
+      name: Disabled allow health
+      priority: 500
+      enabled: false
+      match:
+        tools: ["health_check", "ping"]
+        intents: ["network.request.health"]
+      verdict: ALLOW
+      reason: "Would allow health checks"

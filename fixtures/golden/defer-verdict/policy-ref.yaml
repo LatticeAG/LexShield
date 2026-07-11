@@ -1,0 +1,15 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: defer-verdict-fixture
+  name: Defer verdict fixture policy
+  defaultVerdict: BLOCK
+  rules:
+    - id: defer-review
+      name: Defer for manual review
+      priority: 200
+      match:
+        tools: ["update_resource"]
+        intents: ["infra.mutate.resource"]
+      verdict: DEFER
+      reason: "Deferred for manual policy review"

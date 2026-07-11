@@ -1,0 +1,12 @@
+version: 1
+tool_map:
+  health_check: network.request.health
+  ping: network.request.health
+  send_email: comms.send.email
+  send_slack: comms.send.slack
+patterns:
+  - name: weak_email_signal
+    match:
+      any_arg_regex: "(?i)weekly update"
+    intent: comms.send.email
+    confidence: 0.7
