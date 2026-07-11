@@ -2,6 +2,7 @@ import { classifyDeterministic } from './deterministic.js';
 import type { Classification, DeterministicRules, ToolCallRequest } from '../types.js';
 
 const DETERMINISTIC_SKIP_LLM_THRESHOLD = 0.9;
+export const UNKNOWN_INTENT = 'unknown.unclassified';
 
 export interface ClassifierPipelineOptions {
   deterministicRules?: DeterministicRules;
@@ -12,22 +13,32 @@ export async function runClassifierPipeline(
   request: ToolCallRequest,
   options: ClassifierPipelineOptions = {},
 ): Promise<Classification[]> {
-  const deterministicRules = options.deterministicRules ?? {
-    version: '1',
-    tool_map: {},
-    patterns: [],
-  };
+  const results: Classification[] = [];
 
-  const deterministic = classifyDeterministic(request, { rules: deterministicRules });
-  const primary = deterministic[0];
+  const deterministic = classifyDeterministic(request, {
+    rules: options.deterministicRules,
+  });
 
-  if (primary && primary.confidence >= DETERMINISTIC_SKIP_LLM_THRESHOLD) {
-    return deterministic;
+  if (deterministic) {
+    results.push(deterministic);
+    if (deterministic.confidence >= DETERMINISTIC_SKIP_LLM_THRESHOLD) {
+      return results;
+    }
   }
 
   if (options.llmEnabled) {
     // LLM classifier is not implemented in the scaffold.
   }
 
-  return deterministic;
+  if (results.length === 0) {
+    results.push({
+      intent: UNKNOWN_INTENT,
+      confidence: 0.3,
+      alternatives: [],
+      classifier: 'deterministic:v1',
+      reasoning: 'No deterministic classification',
+    });
+  }
+
+  return results;
 }

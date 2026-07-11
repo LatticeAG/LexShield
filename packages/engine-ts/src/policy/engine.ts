@@ -1,11 +1,71 @@
 import type { Classification, Policy, PolicyRule, ToolCallRequest, Verdict } from '../types.js';
+import {
+  Expression,
+  buildExpressionBindings,
+  type ExpressionBindings,
+} from './expressions.js';
 
 export interface PolicyEvaluationInput {
   request: ToolCallRequest;
   classifications: Classification[];
 }
 
-function ruleMatches(rule: PolicyRule, input: PolicyEvaluationInput): boolean {
+const UNKNOWN_INTENT = 'unknown.unclassified';
+const expressionCache = new Map<string, Expression>();
+
+function getExpression(source: string): Expression {
+  let compiled = expressionCache.get(source);
+  if (!compiled) {
+    compiled = Expression.parse(source);
+    expressionCache.set(source, compiled);
+  }
+  return compiled;
+}
+
+function globMatch(pattern: string, value: string): boolean {
+  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  const regex = new RegExp(`^${escaped}$`);
+  return regex.test(value);
+}
+
+function matchingIntents(classifications: Classification[]): Set<string> {
+  const intents = new Set<string>();
+  const primary = classifications[0];
+  if (!primary) {
+    return intents;
+  }
+
+  intents.add(primary.intent);
+  for (const alternative of primary.alternatives) {
+    intents.add(alternative.intent);
+  }
+
+  return intents;
+}
+
+function tagsMatch(
+  requiredTags: Record<string, string[]>,
+  contextTags: Record<string, string> | undefined,
+): boolean {
+  if (contextTags === undefined) {
+    return false;
+  }
+
+  for (const [key, allowedValues] of Object.entries(requiredTags)) {
+    const actual = contextTags[key];
+    if (actual === undefined || !allowedValues.includes(actual)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function ruleMatches(
+  rule: PolicyRule,
+  input: PolicyEvaluationInput,
+  bindings: ExpressionBindings,
+): boolean {
   const { request, classifications } = input;
   const primary = classifications[0];
   const match = rule.match;
@@ -19,10 +79,7 @@ function ruleMatches(rule: PolicyRule, input: PolicyEvaluationInput): boolean {
   }
 
   if (match.intents?.length) {
-    const intents = new Set([
-      ...(primary ? [primary.intent] : []),
-      ...classifications.flatMap((c) => c.alternatives.map((a) => a.intent)),
-    ]);
+    const intents = matchingIntents(classifications);
     const matched = match.intents.some((intent) => intents.has(intent));
     if (!matched) {
       return false;
@@ -50,24 +107,29 @@ function ruleMatches(rule: PolicyRule, input: PolicyEvaluationInput): boolean {
     }
   }
 
-  if (match.minConfidence !== undefined && primary) {
-    if (primary.confidence < match.minConfidence) {
+  if (match.tags && Object.keys(match.tags).length > 0) {
+    if (!tagsMatch(match.tags, request.context.tags)) {
       return false;
     }
   }
 
-  // Expression evaluation is not implemented in the scaffold.
+  if (match.minConfidence !== undefined) {
+    if (!primary || primary.confidence < match.minConfidence) {
+      return false;
+    }
+  }
+
   if (match.expression) {
-    return false;
+    try {
+      if (!getExpression(match.expression).evaluate(bindings)) {
+        return false;
+      }
+    } catch {
+      return false;
+    }
   }
 
   return true;
-}
-
-function globMatch(pattern: string, value: string): boolean {
-  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-  const regex = new RegExp(`^${escaped}$`);
-  return regex.test(value);
 }
 
 function sortRules(rules: PolicyRule[]): PolicyRule[] {
@@ -86,24 +148,43 @@ export function evaluatePolicy(
   input: PolicyEvaluationInput,
   startedAt = Date.now(),
 ): Verdict {
+  const primary = input.classifications[0];
+  const bindings = buildExpressionBindings(input.request, input.classifications);
   const sorted = sortRules(policy.rules);
-  const matchedRule = sorted.find((rule) => ruleMatches(rule, input));
+  const matchedRule = sorted.find((rule) => ruleMatches(rule, input, bindings));
 
-  const decision = matchedRule?.verdict ?? policy.defaultVerdict;
-  const reason =
-    matchedRule?.reason ??
-    (decision === policy.defaultVerdict
-      ? 'No matching rule; applied default verdict'
-      : 'No matching rule');
+  if (matchedRule) {
+    return {
+      requestId: input.request.id,
+      decision: matchedRule.verdict,
+      matchedRuleId: matchedRule.id,
+      reason: matchedRule.reason,
+      classifications: input.classifications,
+      durationMs: Date.now() - startedAt,
+      policyVersion: policy.version,
+      challengeId:
+        matchedRule.verdict === 'CHALLENGE' ? `challenge-${input.request.id}` : undefined,
+    };
+  }
 
+  if (!primary || primary.intent === UNKNOWN_INTENT) {
+    return {
+      requestId: input.request.id,
+      decision: 'BLOCK',
+      reason: 'No matching policy rule; default deny for unclassified intent',
+      classifications: input.classifications,
+      durationMs: Date.now() - startedAt,
+      policyVersion: policy.version,
+    };
+  }
+
+  const decision = policy.defaultVerdict;
   return {
     requestId: input.request.id,
     decision,
-    matchedRuleId: matchedRule?.id,
-    reason,
+    reason: `No matching rule; applied default verdict ${decision}`,
     classifications: input.classifications,
     durationMs: Date.now() - startedAt,
     policyVersion: policy.version,
-    challengeId: decision === 'CHALLENGE' ? `challenge-${input.request.id}` : undefined,
   };
 }

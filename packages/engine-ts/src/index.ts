@@ -19,10 +19,15 @@ export {
 
 export { Shield, type EvaluateInput, type GuardOptions, type ShieldOptions } from './shield.js';
 
-export { loadPolicyFromFile, loadPolicyFromString, resolvePolicyPath } from './policy/loader.js';
+export { loadPolicyFromFile, loadPolicyFromString, loadPolicyFromData, resolvePolicyPath } from './policy/loader.js';
 export { evaluatePolicy, type PolicyEvaluationInput } from './policy/engine.js';
+export { Expression, ExpressionError, buildExpressionBindings } from './policy/expressions.js';
 
-export { classifyDeterministic } from './classifiers/deterministic.js';
+export {
+  classifyDeterministic,
+  loadDeterministicRulesFromFile,
+  loadDeterministicRulesFromString,
+} from './classifiers/deterministic.js';
 export { runClassifierPipeline, type ClassifierPipelineOptions } from './classifiers/pipeline.js';
 
 export {
