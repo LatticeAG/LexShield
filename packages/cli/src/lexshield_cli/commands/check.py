@@ -12,41 +12,10 @@ from rich.console import Console
 from lexshield.errors import LexShieldConfigError
 from lexshield.models import VerdictType
 from lexshield.policy.loader import load_policy
+from lexshield.taxonomy import BUILTIN_INTENTS
+from lexshield_cli.config import resolve_config_path, resolve_policy_and_rules
 
 console = Console()
-
-
-def _resolve_config_path(config: Path) -> Path:
-    """Accept a lexshield.yaml path or directory containing it."""
-    if config.is_dir():
-        candidate = config / "lexshield.yaml"
-        if candidate.is_file():
-            return candidate
-        raise LexShieldConfigError(f"No lexshield.yaml found in directory: {config}")
-    return config
-
-
-def _resolve_paths_from_config(config: Path) -> tuple[Path, Path | None]:
-    """Return policy and optional rules paths relative to config directory."""
-    with config.open(encoding="utf-8") as handle:
-        raw = yaml.safe_load(handle)
-
-    if not isinstance(raw, dict) or "shield" not in raw:
-        raise LexShieldConfigError("Config must contain a 'shield' section")
-
-    shield_cfg = raw["shield"]
-    if not isinstance(shield_cfg, dict):
-        raise LexShieldConfigError("'shield' section must be a mapping")
-
-    base_dir = config.parent
-    policy_path = base_dir / shield_cfg.get("policy", "./policy.yaml")
-    rules_path: Path | None = None
-    for classifier in shield_cfg.get("classifiers", []):
-        if isinstance(classifier, dict) and classifier.get("type") == "deterministic":
-            rules_path = base_dir / classifier.get("path", "./rules.yaml")
-            break
-
-    return policy_path, rules_path
 
 
 def _validate_rules_file(path: Path) -> list[str]:
@@ -89,6 +58,18 @@ def _collect_intent_refs(policy_data: dict[str, Any]) -> set[str]:
     return intents
 
 
+def _warn_unknown_intents(intent_refs: set[str]) -> list[str]:
+    """Return warnings for intent refs outside the built-in taxonomy."""
+    unknown = sorted(
+        intent
+        for intent in intent_refs
+        if intent not in BUILTIN_INTENTS and not intent.startswith("custom.")
+    )
+    if not unknown:
+        return []
+    return [f"Intent refs not in built-in taxonomy: {', '.join(unknown)}"]
+
+
 def check(
     config: Path = typer.Option(
         Path("lexshield.yaml"),
@@ -123,13 +104,13 @@ def check(
     warnings: list[str] = []
 
     try:
-        config_path = _resolve_config_path(config) if config.exists() else config
+        config_path = resolve_config_path(config) if config.exists() else config
 
         if policy is not None:
             policy_path = policy
             rules_path = rules
         elif config_path.exists():
-            policy_path, rules_path = _resolve_paths_from_config(config_path)
+            policy_path, rules_path = resolve_policy_and_rules(config_path)
             if rules is not None:
                 rules_path = rules
         else:
@@ -146,14 +127,19 @@ def check(
         else:
             errors.extend(_validate_rules_file(rules_path))
 
+        allow_msg = (
+            "defaultVerdict is ALLOW; default deny (BLOCK) is recommended for production"
+        )
         if loaded.policy.default_verdict == VerdictType.ALLOW:
-            warnings.append(
-                "defaultVerdict is ALLOW; default deny (BLOCK) is recommended for production"
-            )
+            if strict:
+                errors.append(allow_msg)
+            else:
+                warnings.append(allow_msg)
 
         with policy_path.open(encoding="utf-8") as handle:
             policy_raw = yaml.safe_load(handle)
         intent_refs = _collect_intent_refs(policy_raw if isinstance(policy_raw, dict) else {})
+        warnings.extend(_warn_unknown_intents(intent_refs))
 
         console.print(f"[green]OK[/green] policy={policy_path}")
         console.print(f"  rules: {rule_count} policy rule(s)")

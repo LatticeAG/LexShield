@@ -9,43 +9,33 @@ from pathlib import Path
 from typing import Any
 
 import typer
-import yaml
 from rich.console import Console
 from rich.table import Table
 
 from lexshield.errors import LexShieldConfigError
 from lexshield.models import ToolCallRequest, Verdict
 from lexshield.shield import Shield
+from lexshield.traces.sink import NDJSONTraceSink, StdoutTraceSink
+from lexshield_cli.config import resolve_config_path, resolve_policy_and_rules
 
 console = Console()
 
 
-def _resolve_config_path(config: Path) -> Path:
-    """Accept a lexshield.yaml path or directory containing it."""
-    if config.is_dir():
-        candidate = config / "lexshield.yaml"
-        if candidate.is_file():
-            return candidate
-        raise LexShieldConfigError(f"No lexshield.yaml found in directory: {config}")
-    return config
-
-
 def _resolve_rules_path(config: Path) -> Path | None:
-    with config.open(encoding="utf-8") as handle:
-        raw = yaml.safe_load(handle)
+    _, rules_path = resolve_policy_and_rules(config)
+    return rules_path
 
-    if not isinstance(raw, dict):
-        return None
 
-    shield_cfg = raw.get("shield", {})
-    if not isinstance(shield_cfg, dict):
-        return None
-
-    base_dir = config.parent
-    for classifier in shield_cfg.get("classifiers", []):
-        if isinstance(classifier, dict) and classifier.get("type") == "deterministic":
-            return base_dir / classifier.get("path", "./rules.yaml")
-    return None
+def _without_stdout_sinks(shield: Shield) -> Shield:
+    """CLI evaluate prints verdicts to stdout; omit stdout trace summaries."""
+    shield.trace_sinks = [
+        sink for sink in shield.trace_sinks if not isinstance(sink, StdoutTraceSink)
+    ]
+    shield.trace_sink = next(
+        (sink for sink in shield.trace_sinks if isinstance(sink, NDJSONTraceSink)),
+        shield.trace_sinks[0] if shield.trace_sinks else None,
+    )
+    return shield
 
 
 def _load_shield(
@@ -57,7 +47,10 @@ def _load_shield(
     if policy is not None:
         rules_path = rules
         if rules_path is None and config.exists():
-            rules_path = _resolve_rules_path(config)
+            try:
+                rules_path = _resolve_rules_path(resolve_config_path(config))
+            except LexShieldConfigError:
+                rules_path = None
         return Shield(
             shield_id="cli",
             name="cli-evaluate",
@@ -70,17 +63,56 @@ def _load_shield(
             f"Config file not found: {config} (use --policy or create config with lexshield init)"
         )
 
+    config_path = resolve_config_path(config)
     if rules is not None:
-        base = Shield.from_config(config)
+        base = Shield.from_config(config_path)
         return Shield(
             shield_id=base.shield_id,
             name=base.name,
             policy_path=base.policy_path,
             rules_path=rules,
             trace_sink_path=base.trace_sink.path if base.trace_sink else None,
+            challenge_store_path=base.challenge_store.base_path,
+            fail_on_classifier_error=base.fail_on_classifier_error,
+            redact_emails=base.redact_emails,
         )
 
-    return Shield.from_config(config)
+    return _without_stdout_sinks(Shield.from_config(config_path))
+
+
+def _parse_caller(
+    caller: str | None,
+    *,
+    caller_type: str = "agent",
+) -> dict[str, Any]:
+    if caller is None:
+        return {"id": "anonymous", "type": caller_type}
+    caller = caller.strip()
+    if caller.startswith("{"):
+        parsed = json.loads(caller)
+        if not isinstance(parsed, dict):
+            raise ValueError("--caller JSON must be an object")
+        return parsed
+    return {"id": caller, "type": caller_type}
+
+
+def _build_context(
+    *,
+    environment: str | None,
+    tags_json: str,
+) -> dict[str, Any]:
+    context: dict[str, Any] = {}
+    if environment:
+        context["environment"] = environment
+    try:
+        tags = json.loads(tags_json)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid --tags JSON: {exc}") from exc
+    if tags:
+        if not isinstance(tags, dict):
+            raise ValueError("--tags must be a JSON object")
+        context["tags"] = tags
+    return context
 
 
 def _print_verdict_table(verdict: Verdict) -> None:
@@ -113,15 +145,14 @@ async def _evaluate_request(
     *,
     tool: str,
     arguments: dict[str, Any],
-    caller: str | None,
+    caller: dict[str, Any],
     request_id: str | None = None,
     context: dict[str, Any] | None = None,
 ) -> Verdict:
-    caller_payload: dict[str, Any] = {"id": caller or "anonymous", "type": "agent"}
     return await shield.evaluate(
         tool=tool,
         arguments=arguments,
-        caller=caller_payload,
+        caller=caller,
         context=context,
         request_id=request_id,
     )
@@ -130,7 +161,23 @@ async def _evaluate_request(
 def evaluate(
     tool: str | None = typer.Option(None, "--tool", help="Tool name to evaluate."),
     args: str = typer.Option("{}", "--args", help="Tool arguments as JSON."),
-    caller: str | None = typer.Option(None, "--caller", help="Caller id."),
+    caller: str | None = typer.Option(
+        None,
+        "--caller",
+        help="Caller id or JSON object (e.g. '{\"id\":\"a1\",\"type\":\"agent\"}').",
+    ),
+    caller_type: str = typer.Option(
+        "agent",
+        "--caller-type",
+        help="Caller type when --caller is a plain id.",
+    ),
+    environment: str | None = typer.Option(
+        None,
+        "--environment",
+        "--env",
+        help="Sets context.environment.",
+    ),
+    tags: str = typer.Option("{}", "--tags", help="Context tags as JSON object."),
     config: Path = typer.Option(
         Path("lexshield.yaml"),
         "--config",
@@ -162,7 +209,7 @@ def evaluate(
 ) -> None:
     """Evaluate a tool call against loaded policy (offline)."""
     try:
-        config_path = _resolve_config_path(config)
+        config_path = resolve_config_path(config) if config.exists() else config
         shield = _load_shield(config=config_path, policy=policy, rules=rules)
     except LexShieldConfigError as exc:
         console.print(f"[red]Config error:[/red] {exc}")
@@ -170,6 +217,8 @@ def evaluate(
 
     if stdin:
         payload: dict[str, Any] = json.load(sys.stdin)
+        if "shieldId" not in payload and "shield_id" not in payload:
+            payload["shieldId"] = shield.shield_id
         try:
             request = ToolCallRequest.model_validate(payload)
         except Exception as exc:
@@ -198,12 +247,20 @@ def evaluate(
             console.print("[red]--args must be a JSON object[/red]")
             raise typer.Exit(code=1)
 
+        try:
+            caller_payload = _parse_caller(caller, caller_type=caller_type)
+            context_payload = _build_context(environment=environment, tags_json=tags)
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=1) from exc
+
         verdict = asyncio.run(
             _evaluate_request(
                 shield,
                 tool=tool,
                 arguments=arguments,
-                caller=caller,
+                caller=caller_payload,
+                context=context_payload or None,
             )
         )
 

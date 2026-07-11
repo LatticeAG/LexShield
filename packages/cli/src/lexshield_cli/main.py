@@ -35,6 +35,20 @@ app.add_typer(packs_app, name="packs")
 
 
 @app.command()
+def completion(
+    shell: str = typer.Argument(help="Shell name (bash, zsh, fish)."),
+) -> None:
+    """Generate shell completion script (stub)."""
+    from rich.console import Console
+
+    console = Console()
+    console.print(
+        f"# LexShield shell completion for {shell} is not yet implemented.\n"
+        f"# Re-run after a future release or use: lexshield --help"
+    )
+
+
+@app.command()
 def version() -> None:
     """Print CLI semver and git sha when available (SPEC §9.E)."""
     import subprocess

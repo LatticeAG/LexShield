@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import Literal
 
 import typer
 from rich.console import Console
+
+from lexshield_cli.commands.packs import _pack_dir
 
 console = Console()
 
@@ -61,6 +64,22 @@ patterns:
     confidence: 0.98
 """
 
+CHALLENGE_DELETE_RULE = """\
+  - id: challenge-delete-prod
+    name: Challenge destructive actions in production
+    priority: 200
+    match:
+      environments: ["production"]
+      intents: ["infra.delete.resource", "data.delete.record"]
+    verdict: CHALLENGE
+    reason: "Destructive action in production requires approval"
+    challenge:
+      channel: stdout
+      timeoutSeconds: 3600
+      onTimeout: BLOCK
+
+"""
+
 POLICY_TEMPLATES: dict[PackName, str] = {
     "baseline-deny": """\
 version: 1
@@ -77,6 +96,19 @@ rules:
       intents: ["network.request.health"]
     verdict: ALLOW
     reason: "Health checks are always allowed"
+
+  - id: challenge-delete-prod
+    name: Challenge destructive actions in production
+    priority: 200
+    match:
+      environments: ["production"]
+      intents: ["infra.delete.resource", "data.delete.record"]
+    verdict: CHALLENGE
+    reason: "Destructive action in production requires approval"
+    challenge:
+      channel: stdout
+      timeoutSeconds: 3600
+      onTimeout: BLOCK
 
   - id: block-secret-exposure
     name: Block secret exposure
@@ -204,6 +236,32 @@ def _write_file(path: Path, content: str, *, force: bool) -> None:
     console.print(f"[green]wrote[/green] {path}")
 
 
+def _ensure_baseline_challenge_delete(policy_content: str) -> str:
+    """Embed challenge-delete-prod in baseline template when missing."""
+    if "challenge-delete-prod" in policy_content:
+        return policy_content
+    marker = '  - id: block-secret-exposure'
+    if marker not in policy_content:
+        return policy_content
+    return policy_content.replace(marker, CHALLENGE_DELETE_RULE + marker, 1)
+
+
+def _write_rules_from_pack(cwd: Path, pack: PackName, *, force: bool) -> None:
+    """Copy rules.yaml from built-in pack when available."""
+    rules_dest = cwd / "rules.yaml"
+    pack_dir = _pack_dir(pack)
+    if pack_dir is not None:
+        rules_src = pack_dir / "rules.yaml"
+        if rules_src.is_file():
+            if rules_dest.exists() and not force:
+                console.print(f"[yellow]skip[/yellow] {rules_dest} (already exists)")
+                return
+            shutil.copy2(rules_src, rules_dest, follow_symlinks=True)
+            console.print(f"[green]wrote[/green] {rules_dest} (from pack {pack})")
+            return
+    _write_file(rules_dest, RULES_YAML, force=force)
+
+
 def _ensure_gitignore(cwd: Path) -> None:
     gitignore = cwd / ".gitignore"
     if gitignore.exists():
@@ -227,7 +285,12 @@ def init(
     """Write lexshield.yaml, policy.yaml, rules.yaml, and .gitignore entries."""
     cwd = Path.cwd()
     _write_file(cwd / "lexshield.yaml", LEXSHIELD_YAML, force=force)
-    _write_file(cwd / "rules.yaml", RULES_YAML, force=force)
-    _write_file(cwd / "policy.yaml", POLICY_TEMPLATES[pack], force=force)
+
+    policy_content = POLICY_TEMPLATES[pack]
+    if pack == "baseline-deny":
+        policy_content = _ensure_baseline_challenge_delete(policy_content)
+    _write_file(cwd / "policy.yaml", policy_content, force=force)
+
+    _write_rules_from_pack(cwd, pack, force=force)
     _ensure_gitignore(cwd)
     console.print(f"[bold green]LexShield initialized[/bold green] (pack: {pack})")
