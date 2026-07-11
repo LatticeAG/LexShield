@@ -30,3 +30,6 @@ where = ["src"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "golden: golden fixture regression tests",
+]

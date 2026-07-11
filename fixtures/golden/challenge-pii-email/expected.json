@@ -1,0 +1,6 @@
+{
+  "decision": "CHALLENGE",
+  "matchedRuleId": "challenge-pii-email",
+  "reason": "Sending PII requires approval",
+  "primaryIntent": "comms.send.email"
+}

@@ -102,10 +102,7 @@ def create_app(shield: Shield | None = None) -> FastAPI:
     async def reload_policy(shield_id: str) -> dict[str, str]:
         active = _get_shield(app, shield_id)
         try:
-            from lexshield.policy.loader import load_policy
-
-            active.policy = load_policy(active.policy_path)
-            active.policy_engine.policy = active.policy
+            active.reload_policy()
             return {"status": "reloaded"}
         except Exception as exc:
             return {"status": "failed", "message": str(exc)}

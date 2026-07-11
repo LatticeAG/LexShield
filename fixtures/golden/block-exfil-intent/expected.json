@@ -1,0 +1,6 @@
+{
+  "decision": "BLOCK",
+  "matchedRuleId": "block-exfil",
+  "reason": "Possible data exfiltration",
+  "primaryIntent": "data.exfiltrate"
+}

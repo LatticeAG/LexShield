@@ -96,7 +96,7 @@ async function classificationsForRequest(
     return [
       {
         intent: UNKNOWN_INTENT,
-        confidence: 0.3,
+        confidence: 0.5,
         alternatives: [],
         classifier: 'deterministic:v1',
         reasoning: 'No deterministic classification',
@@ -113,7 +113,7 @@ async function classificationsForRequest(
   return [
     {
       intent: UNKNOWN_INTENT,
-      confidence: 0.3,
+      confidence: 0.5,
       alternatives: [],
       classifier: 'deterministic:v1',
       reasoning: 'No deterministic classification',

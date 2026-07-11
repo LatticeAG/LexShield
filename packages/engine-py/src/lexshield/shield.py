@@ -25,6 +25,7 @@ from lexshield.models import (
     CallContext,
     ToolCallRequest,
     ToolRef,
+    Trace,
     Verdict,
     VerdictType,
 )
@@ -91,8 +92,9 @@ class Shield:
         self.shield_id = shield_id
         self.name = name
         self.policy_path = policy_path
-        self.policy = load_policy(policy_path)
-        self.policy_engine = PolicyEngine(self.policy)
+        self.compiled_policy = load_policy(policy_path)
+        self.policy = self.compiled_policy.policy
+        self.policy_engine = PolicyEngine(self.compiled_policy)
         self.classifier_pipeline = ClassifierPipeline(rules_path=rules_path)
         self.challenge_store = ChallengeStore()
         self.trace_sink = (
@@ -196,7 +198,21 @@ class Shield:
                 "durationMs": (time.perf_counter() - start) * 1000,
             }
         )
+        if self.trace_sink is not None:
+            self.trace_sink.write(
+                Trace(
+                    id=rid,
+                    request=request,
+                    verdict=verdict,
+                )
+            )
         return verdict
+
+    def reload_policy(self) -> None:
+        """Reload policy from disk and refresh the policy engine."""
+        self.compiled_policy = load_policy(self.policy_path)
+        self.policy = self.compiled_policy.policy
+        self.policy_engine = PolicyEngine(self.compiled_policy)
 
     async def record_outcome(self, request_id: str, outcome: str) -> None:
         """Record execution outcome for a prior request (stub)."""

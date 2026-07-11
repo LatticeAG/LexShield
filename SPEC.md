@@ -1,12 +1,12 @@
 # LexShield — Product & Engineering Specification
 
-> **Status**: Planning (v0.4 — v0.1 feature freeze)  
+> **Status**: Planning (v0.5 — v0.1 implementation spec)  
 > **Owner**: LatticeAG  
 > **License**: MIT  
 > **First build**: **Open-source only** (CLI + SDKs + engine). No SaaS.  
 > **Deferred**: LexShield Cloud (hosted control plane) — post-MVP, only after OSS is solid.  
 > **This document is the source of truth for build decisions until replaced by ADRs.**  
-> **Ship list**: [§9 v0.1 Feature Freeze](#9-v01-feature-freeze-specific) · **Build readiness**: [§36](#36-build-readiness)
+> **Ship list**: [§9 v0.1 Feature Freeze](#9-v01-feature-freeze-specific) · **Build bible**: [§9B OSS v0.1 Implementation](#9b-oss-v01-implementation-specification-detailed) · **Build readiness**: [§36](#36-build-readiness)
 
 ---
 
@@ -21,6 +21,7 @@
 7. [Success Metrics](#7-success-metrics)
 8. [Scope: Goals, Non-Goals, and Phasing](#8-scope-goals-non-goals-and-phasing)
 9. [v0.1 Feature Freeze (Specific)](#9-v01-feature-freeze-specific)
+9B. [OSS v0.1 Implementation Specification (Detailed)](#9b-oss-v01-implementation-specification-detailed)
 10. [Intent Taxonomy](#10-intent-taxonomy)
 11. [Classifier Architecture](#11-classifier-architecture)
 12. [Policy Language & Engine](#12-policy-language--engine)
@@ -501,6 +502,761 @@ If scope must shrink further, cut in this order (keep product coherent):
 5. Then: other packs + LLM classifier  
 
 **Never cut:** default-deny, explainable verdicts, redaction, golden fixtures.
+
+---
+
+## 9B. OSS v0.1 Implementation Specification (Detailed)
+
+> **Authoritative build bible** for the OSS-only `v0.1.0` tag.  
+> Implements [§9 Feature Freeze](#9-v01-feature-freeze-specific) with file-level precision.  
+> **No LexShield Cloud, no SaaS, no phone-home.** Python engine is source of truth; TypeScript must match golden fixtures bit-for-bit on `decision`, `matchedRuleId`, `reason`, and `primaryIntent`.
+
+### 9B.1 Module map
+
+Exact paths under the monorepo. One-line responsibility each. Stubs may exist at scaffold time; v0.1 ships full behavior.
+
+#### `packages/engine-py` (Python engine + SDK + FastAPI — source of truth)
+
+| Path | Responsibility |
+|------|----------------|
+| `packages/engine-py/pyproject.toml` | Package metadata; depends on `pydantic`, `httpx`, `ulid-py`, `pyyaml`, `fastapi`, `uvicorn` |
+| `packages/engine-py/src/lexshield/__init__.py` | Public exports: `Shield`, exceptions, `__version__` |
+| `packages/engine-py/src/lexshield/version.py` | Semver string + optional git SHA |
+| `packages/engine-py/src/lexshield/models.py` | Pydantic v2 models matching §19 (`Policy`, `Verdict`, `ToolCallRequest`, …) |
+| `packages/engine-py/src/lexshield/errors.py` | `LexShieldBlockedError`, `LexShieldChallengeError`, `LexShieldConfigError` |
+| `packages/engine-py/src/lexshield/config/loader.py` | Parse `lexshield.yaml`; resolve relative paths; validate classifier/sink shapes |
+| `packages/engine-py/src/lexshield/shield.py` | `Shield.from_config`, `evaluate`, `guard`/`guard_sync`, `session`, `record_outcome` |
+| `packages/engine-py/src/lexshield/policy/loader.py` | Load `policy.yaml`; strict unknown-field rejection; compile expressions + globs |
+| `packages/engine-py/src/lexshield/policy/engine.py` | `PolicyEngine.evaluate()` — rule match, priority, default verdict |
+| `packages/engine-py/src/lexshield/policy/expressions.py` | Safe expression lexer/parser/evaluator (§9.5 subset) |
+| `packages/engine-py/src/lexshield/policy/glob.py` | `fnmatch` tool-name glob matcher (`*` only) |
+| `packages/engine-py/src/lexshield/classifiers/deterministic.py` | `rules.yaml` tool_map + pattern regex classification |
+| `packages/engine-py/src/lexshield/classifiers/llm.py` | OpenAI-compatible JSON classify; redact args; 2000ms timeout |
+| `packages/engine-py/src/lexshield/classifiers/pipeline.py` | Deterministic → LLM merge; skip LLM at ≥ 0.90 det confidence |
+| `packages/engine-py/src/lexshield/classifiers/severity.py` | Built-in intent severity table (Appendix B); merge on conflict |
+| `packages/engine-py/src/lexshield/taxonomy/builtin.py` | Frozen 24-intent catalog + severity ranks |
+| `packages/engine-py/src/lexshield/redaction.py` | Secret/email redaction before LLM + trace write (§9.6) |
+| `packages/engine-py/src/lexshield/traces/sink.py` | NDJSON append + stdout sink; async buffered write |
+| `packages/engine-py/src/lexshield/challenges/store.py` | Local challenge CRUD under `.lexshield/challenges/` |
+| `packages/engine-py/src/lexshield/server/app.py` | FastAPI routes per §9.C; 403 error body per §9.7 |
+| `packages/engine-py/src/lexshield/server/proxy.py` | Upstream forward for `/execute` when ALLOW |
+| `packages/engine-py/tests/test_policy_engine.py` | Unit tests: match fields, priority, expressions, globs |
+| `packages/engine-py/tests/test_golden.py` | Golden fixture runner over `fixtures/golden/**` |
+| `packages/engine-py/tests/test_redaction.py` | Redaction pattern regression |
+| `packages/engine-py/tests/test_classifiers.py` | Deterministic + LLM cassettes |
+| `packages/engine-py/tests/conftest.py` | Shared fixtures; `LEXSHIELD_GOLDEN_DETERMINISTIC_ONLY=1` |
+
+#### `packages/cli` (Python Typer CLI — imports `lexshield`)
+
+| Path | Responsibility |
+|------|----------------|
+| `packages/cli/pyproject.toml` | CLI package; entry point `lexshield = lexshield_cli.main:app` |
+| `packages/cli/src/lexshield_cli/main.py` | Typer app root; registers subcommands |
+| `packages/cli/src/lexshield_cli/commands/init.py` | Scaffold `lexshield.yaml`, `policy.yaml`, `rules.yaml`, `.gitignore` |
+| `packages/cli/src/lexshield_cli/commands/check.py` | Validate config + policy + taxonomy; `--strict` |
+| `packages/cli/src/lexshield_cli/commands/evaluate.py` | Offline evaluate from flags or `--stdin` |
+| `packages/cli/src/lexshield_cli/commands/run.py` | Start uvicorn FastAPI on `127.0.0.1:8787` |
+| `packages/cli/src/lexshield_cli/commands/traces.py` | `list` / `show` over NDJSON trace file |
+| `packages/cli/src/lexshield_cli/commands/challenge.py` | `list` / `approve` / `deny` local challenges |
+| `packages/cli/src/lexshield_cli/commands/packs.py` | `list` / `apply` — copy from `packs/` |
+| `packages/cli/tests/test_cli_check.py` | Snapshot/exit-code tests for `check` |
+| `packages/cli/tests/test_cli_evaluate.py` | Exit codes + JSON stdout for `evaluate` |
+
+#### `packages/engine-ts` (`@latticeag/lexshield` — evaluate parity only)
+
+| Path | Responsibility |
+|------|----------------|
+| `packages/engine-ts/package.json` | npm package; `test:golden` script |
+| `packages/engine-ts/src/index.ts` | Public exports |
+| `packages/engine-ts/src/types.ts` | Zod-inferred types mirroring §19 JSON shapes |
+| `packages/engine-ts/src/version.ts` | Package version |
+| `packages/engine-ts/src/errors.ts` | TS equivalents of SDK exceptions |
+| `packages/engine-ts/src/shield.ts` | `Shield.fromConfig`, `evaluate`, `guard` |
+| `packages/engine-ts/src/policy/loader.ts` | YAML policy load + compile |
+| `packages/engine-ts/src/policy/engine.ts` | `PolicyEngine.evaluate()` — must match Python |
+| `packages/engine-ts/src/policy/expressions.ts` | Expression subset evaluator — must match Python |
+| `packages/engine-ts/src/policy/glob.ts` | `fnmatch`-compatible glob (`*` only) |
+| `packages/engine-ts/src/classifiers/deterministic.ts` | `rules.yaml` deterministic classify |
+| `packages/engine-ts/src/classifiers/pipeline.ts` | Pipeline orchestration (LLM stub/skipped in golden CI) |
+| `packages/engine-ts/src/redaction.ts` | Redaction helpers (parity with Python) |
+| `packages/engine-ts/tests/golden.test.ts` | Vitest golden runner; same fixtures as Python |
+
+#### Repo-root shared assets (consumed by all packages)
+
+| Path | Responsibility |
+|------|----------------|
+| `schemas/*.schema.json` | JSON Schema for Policy, ToolCallRequest, Verdict, Trace |
+| `packs/*/policy.yaml` | Shipped policy packs (Appendix A) |
+| `packs/*/rules.yaml` | Pack deterministic rules |
+| `fixtures/golden/<scenario>/` | Shared golden scenarios (§9B.8) |
+| `pyproject.toml` | uv workspace root; `pytest` + `ruff` config |
+
+---
+
+### 9B.2 PolicyEngine algorithm
+
+`PolicyEngine.evaluate(request, classifications)` — numbered pseudocode. Implements §9.2.A rule match + §12.2 semantics.
+
+```
+1.  START timer
+2.  IF classifications is empty:
+        RETURN Verdict(decision=defaultVerdict or BLOCK,
+                       reason="No classification; fail closed",
+                       matchedRuleId=null)
+3.  primary ← merge_classifications(classifications)   // §9B.6 severity merge
+4.  IF primary.intent == "unknown.unclassified":
+        // still evaluate rules — some rules may match on tools/env only
+        PASS
+5.  enabled_rules ← [r for r in policy.rules if r.enabled != false]
+6.  sorted_rules ← SORT enabled_rules BY priority DESC, then id ASC   // §9.2.A tie-break
+7.  matching ← []
+8.  FOR EACH rule IN sorted_rules:
+        IF rule_matches(rule.match, request, primary, classifications):
+            APPEND rule TO matching
+9.  IF matching is not empty:
+        winner ← matching[0]   // highest priority already first
+        challenge_id ← null
+        IF winner.verdict == CHALLENGE or winner.verdict == DEFER:
+            challenge_id ← create_challenge(winner.challenge, request)   // side effect
+        RETURN Verdict(
+            decision = winner.verdict,
+            matchedRuleId = winner.id,
+            reason = winner.reason,
+            classifications = classifications,
+            challengeId = challenge_id,
+            durationMs = elapsed,
+            policyVersion = policy.version,
+        )
+10. RETURN Verdict(
+        decision = policy.defaultVerdict,
+        matchedRuleId = null,
+        reason = f"No rule matched; default verdict {policy.defaultVerdict}",
+        classifications = classifications,
+        durationMs = elapsed,
+        policyVersion = policy.version,
+    )
+
+SUBROUTINE rule_matches(match, request, primary, classifications):
+    IF match.minConfidence is set AND primary.confidence < match.minConfidence:
+        RETURN false
+    IF match.intents is set AND NOT intent_field_matches(match.intents, primary, classifications):
+        RETURN false
+    IF match.tools is set AND NOT any(glob_match(g, request.tool.name) for g in match.tools):
+        RETURN false
+    IF match.callers is set AND request.caller.id not in match.callers:
+        RETURN false
+    IF match.roles is set AND NOT intersection(request.caller.roles, match.roles):
+        RETURN false
+    IF match.environments is set AND request.context.environment not in match.environments:
+        RETURN false
+    IF match.tags is set AND NOT tags_field_matches(match.tags, request.context.tags):
+        RETURN false
+    IF match.expression is set AND NOT compiled_expression.evaluate(bindings(request, primary)):
+        RETURN false
+    RETURN true
+```
+
+**Bindings for expressions** (frozen): `intent`, `confidence`, `tool.name`, `tool.namespace` (empty string if absent), `caller.id`, `caller.type`, `caller.roles` (list), `env` (alias for `context.environment`, empty string if absent), `tags.<key>`, `args.<key>` (string/number/bool only; missing → empty string).
+
+---
+
+### 9B.3 Rule matching contract
+
+**Global rule:** All **present** `match` fields must succeed (**AND**). Omitted fields are wildcards (always pass).
+
+**Priority:** Among rules that match, **highest `priority` wins**. Tie-break: **lexicographic `rule.id` ascending** (lower id wins when priorities equal).
+
+#### Per-field semantics
+
+| Field | Semantics | AND/OR | Examples |
+|-------|-----------|--------|----------|
+| `intents` | **OR** within list. Matches if **primary intent** ∈ list **OR** any **alternative** intent ∈ list with confidence ≥ `policy.severity_threshold.alternatives_min_confidence` (default **0.4**). | OR in list; AND with other fields | `intents: ["data.exfiltrate", "security.secret_exposure"]` matches primary `security.secret_exposure` |
+| `tools` | **OR** within list. Each entry is a glob (§9B.5). Match `request.tool.name`. | OR in list | `tools: ["send_*", "post_*"]` matches `send_email` |
+| `callers` | **OR** within list. Exact string match on `caller.id`. | OR in list | `callers: ["agent-1", "svc-ci"]` |
+| `roles` | **OR** within list. Match if **any** `caller.roles` element equals **any** list entry. Missing `caller.roles` → field fails if present. | OR in list; OR across caller roles | `roles: ["admin", "platform"]` |
+| `environments` | **OR** within list. Exact match on `context.environment`. Missing env → field fails if present. | OR in list | `environments: ["production"]` |
+| `tags` | **AND** across keys; **OR** within each key's value list. Request tag value must equal **one of** the allowed values for that key. Missing key → field fails. | AND keys, OR values | `tags: { data_class: ["pii"], region: ["us"] }` |
+| `minConfidence` | Single threshold on **primary** intent confidence after classifier merge. | AND with others | `minConfidence: 0.7` blocks match when primary confidence is 0.65 |
+| `expression` | Boolean over bindings (§9B.4). Compiled at load; evaluate at runtime. | AND with others | `env == "production" && args.url contains "internal"` |
+
+#### Worked examples (baseline-deny pack)
+
+| Request summary | Matching fields | Result rule |
+|-----------------|-----------------|-------------|
+| `health_check`, intent `network.request.health` | `tools` + `intents` | `allow-health` (priority 100) |
+| `delete_resource`, env `production`, intent `infra.delete.resource` | `environments` + `intents` | `challenge-delete-prod` (200) |
+| `send_email` + AWS key in body → `security.secret_exposure` | `intents` only | `block-secret-exposure` (300) |
+| `unknown_tool`, intent `unknown.unclassified` | none | default `BLOCK`, `matchedRuleId: null` |
+
+---
+
+### 9B.4 Expression grammar
+
+Frozen subset per §9.5. No function calls except `startsWith`, `contains`, `matches`, and `in`.
+
+#### EBNF
+
+```ebnf
+expression     = or_expr ;
+or_expr        = and_expr { "||" and_expr } ;
+and_expr       = unary_expr { "&&" unary_expr } ;
+unary_expr     = "!" unary_expr | comparison ;
+comparison     = additive [ comp_op additive ] ;
+comp_op        = "==" | "!=" | ">=" | "<=" | ">" | "<" | "in" ;
+additive       = primary ;   (* no + - in v0.1 *)
+primary        = literal | identifier | member | call | "(" expression ")" ;
+member         = identifier { "." identifier } ;
+call           = identifier "(" argument { "," argument } ")" ;
+argument       = expression | string_literal ;
+identifier     = letter { letter | digit | "_" } ;
+literal        = string_literal | number_literal | "true" | "false" ;
+string_literal = '"' { character } '"' | "'" { character } "'" ;
+```
+
+**Member paths allowed:** `intent`, `confidence`, `tool.name`, `tool.namespace`, `caller.id`, `caller.type`, `caller.roles`, `env`, `tags.<key>`, `args.<key>`.
+
+**Calls allowed:** `startsWith(haystack, prefix)`, `contains(haystack, needle)`, `matches(haystack, pattern)` (Python `re` with RE2-ish patterns; compile at load), `needle in list` via `in` operator only.
+
+**Types:** strings compared as strings; numbers as floats; `in` right-hand side must be literal list of strings/numbers.
+
+#### Ten example expressions (expected truth)
+
+Assume bindings unless noted: `intent="comms.send.email"`, `confidence=0.85`, `tool.name="send_email"`, `caller.id="agent-1"`, `caller.type="agent"`, `caller.roles=["support"]`, `env="production"`, `tags.data_class="pii"`, `args.to="user@gmail.com"`, `args.url="https://api.mycompany.com/v1"`.
+
+| # | Expression | Expected |
+|---|------------|----------|
+| 1 | `env == "production"` | **true** |
+| 2 | `env == "staging"` | **false** |
+| 3 | `confidence >= 0.9` | **false** (0.85) |
+| 4 | `intent == "comms.send.email" && tags.data_class == "pii"` | **true** |
+| 5 | `args.to contains "@gmail.com"` | **true** |
+| 6 | `args.to startsWith "admin@"` | **false** |
+| 7 | `caller.id in ["agent-1", "agent-2"]` | **true** |
+| 8 | `!(args.url startsWith "https://api.mycompany.com/")` | **false** |
+| 9 | `matches(args.to, ".*@personal\\.com$")` with `args.to="a@personal.com"` | **true** |
+| 10 | `tool.name == "http_request" && env == "production"` | **false** (`tool.name` is `send_email`) |
+
+---
+
+### 9B.5 Glob semantics
+
+**Recommendation (locked for v0.1):** Use Python `fnmatch.fnmatchcase(tool_name, pattern)` — **`*` wildcard only**. No `**`, `?`, `[...]`, or regex in tool globs.
+
+| Pattern | Matches | Does not match |
+|---------|---------|----------------|
+| `send_*` | `send_email`, `send_slack`, `send_*` (literal asterisk segment) | `resend_email`, `send` |
+| `db.*` | **Only** if tool name contains a literal dot: `db.query`, `db.users` | `db_query`, `db` |
+| `health_check` | exact `health_check` | `health_check_v2` |
+| `*` | any tool name | — |
+
+**Compilation:** At policy load, normalize patterns (reject `?` `[` `]` with `check` error). Store pre-parsed patterns per rule.
+
+**Namespace:** v0.1 matches `tool.name` only; `tool.namespace` is for expressions, not glob field.
+
+---
+
+### 9B.6 Classifier pipeline
+
+#### Flowchart (mermaid)
+
+```mermaid
+flowchart TD
+    A[ToolCallRequest] --> B[Redact args for classify path]
+    B --> C[DeterministicClassifier]
+    C --> D{Pattern or tool_map hit?}
+    D -->|yes| E[det Classification]
+    D -->|no| F[det = null]
+    E --> G{det.confidence >= 0.90?}
+    G -->|yes| M[Merge / severity pick primary]
+    G -->|no| H{LLM available?}
+    F --> H
+    H -->|no| I[primary = unknown.unclassified conf 0.3]
+    H -->|yes| J[LLMClassifier 2000ms timeout]
+    J --> K{LLM result?}
+    K -->|yes| L[Append llm Classification]
+    K -->|no| I
+    L --> M
+    I --> M
+    M --> N[PolicyEngine.evaluate]
+```
+
+#### Confidence thresholds (locked)
+
+| Stage | Threshold | Behavior |
+|-------|-----------|----------|
+| Deterministic pattern hit | 0.90–0.99 (from `rules.yaml`) | Use value from rule; patterns ship at 0.98 |
+| Deterministic tool_map only | **0.70** | Fixed |
+| Skip LLM | **≥ 0.90** on deterministic primary | Do not call LLM |
+| LLM valid response | model-provided 0..1 | Append as second classification |
+| Total failure | **0.30** on `unknown.unclassified` | Fail-closed policy path |
+
+#### Severity merge table (primary intent selection)
+
+When multiple classifications exist, pick **highest severity** intent as primary for policy matching. Severity from Appendix B (abbreviated):
+
+| Intent | Severity |
+|--------|----------|
+| `network.request.health` | 5 |
+| `data.read.public` | 10 |
+| `data.read.internal` | 25 |
+| `comms.send.slack` | 40 |
+| `data.query.sql` | 40 |
+| `data.write.record` | 45 |
+| `comms.send.email` | 50 |
+| `unknown.unclassified` | 50 |
+| `code.write.repo` | 50 |
+| `network.request.http` | 55 |
+| `data.read.pii` | 60 |
+| `infra.provision.resource` | 60 |
+| `infra.mutate.resource` | 65 |
+| `comms.send.external` | 70 |
+| `data.delete.record` | 75 |
+| `finance.charge.create` | 80 |
+| `infra.delete.resource` | 85 |
+| `identity.permission.grant` | 85 |
+| `code.execute.shell` | 88 |
+| `finance.transfer.create` | 90 |
+| `identity.auth.impersonate` | 90 |
+| `data.exfiltrate` | 95 |
+| `security.secret_exposure` | 98 |
+
+**Merge algorithm:** `primary = argmax(classifications, key=severity(intent))`; ties → higher `confidence`; still tied → deterministic classifier wins over LLM. All inputs remain in `verdict.classifications[]`.
+
+---
+
+### 9B.7 Shield.evaluate() sequence
+
+Numbered steps from public API call through trace write (Python SDK; API and CLI call the same path).
+
+```
+ 1. API entry: shield.evaluate(tool, arguments, caller, context, request_id?)
+       OR FastAPI POST /v1/shields/{id}/evaluate
+       OR CLI lexshield evaluate
+ 2. Generate request_id ← argument or ulid.new()
+ 3. Merge session contextvars (conversation_id, environment, tags) into context
+ 4. Build ToolCallRequest { id, shieldId, timestamp UTC ISO, caller, tool, arguments, context }
+ 5. START perf timer
+ 6. Redact copy of arguments for classification (secrets → placeholders; emails per config)
+ 7. AWAIT classifier_pipeline.classify(request)
+ 8. Merge classifications → primary intent (§9B.6)
+ 9. policy_engine.evaluate(request, classifications) → Verdict
+10. SET verdict.requestId, verdict.durationMs from timer
+11. IF verdict.decision in (CHALLENGE, DEFER):
+        persist ChallengeRecord to challenge_store; SET verdict.challengeId
+12. Build Trace { id=request_id, request with arguments_redacted, classifications, verdict, outcome stub }
+13. IF trace sink configured:
+        ENQUEUE async NDJSON write (non-blocking; drop-on-overflow with metric)
+14. RETURN verdict to caller (decorator may raise LexShieldBlockedError / LexShieldChallengeError)
+```
+
+**Not in evaluate:** tool execution, proxy forward (that is `/execute` only after ALLOW).
+
+---
+
+### 9B.8 Golden fixture contract
+
+#### File layout (per scenario)
+
+```
+fixtures/golden/<scenario-name>/
+  request.json          # ToolCallRequest (required)
+  policy-ref.yaml       # Pack pointer or inline policy (required)
+  expected.json         # Verdict subset to assert (required)
+  rules-ref.yaml        # Optional; overrides deterministic rules path
+```
+
+**Naming:** `{decision}-{behavior}` kebab-case, e.g. `block-secret-exposure`, `allow-health`.
+
+#### `policy-ref.yaml` shape
+
+```yaml
+pack: baseline-deny                                    # informational
+policy: ../../../packs/baseline-deny/policy.yaml       # required path
+rules: ../../../packs/baseline-deny/rules.yaml         # required unless rules-ref.yaml present
+```
+
+#### Runner behavior (Python `test_golden.py` + TS `golden.test.ts`)
+
+1. Discover all subdirectories under `fixtures/golden/` containing `request.json` + `expected.json`.
+2. Load `policy-ref.yaml`; resolve `policy` and `rules` paths relative to scenario dir.
+3. Construct `Shield` / `PolicyEngine` + `ClassifierPipeline` with **deterministic classifier only** when `LEXSHIELD_GOLDEN_DETERMINISTIC_ONLY=1` (default in CI).
+4. Parse `request.json` → `ToolCallRequest`.
+5. Run full `evaluate` path (classify → policy).
+6. Compare **exact** fields from `expected.json`:
+
+| Field | Compared | Notes |
+|-------|----------|-------|
+| `decision` | **yes** | `ALLOW` \| `BLOCK` \| `CHALLENGE` \| `DEFER` |
+| `matchedRuleId` | **yes** | Use JSON `null` when expect no rule match |
+| `reason` | **yes** | Exact string from winning rule or default message |
+| `primaryIntent` | **yes** | Primary after merge |
+| `durationMs` | no | Ignored unless `expected.json` has `"strict": true` |
+| `challengeId` | no | Ignored in CI unless strict |
+| `classifications` | no | Unless strict |
+
+7. On mismatch: fail test with diff of actual vs expected.
+8. **Deterministic-only CI rule:** CI sets `LEXSHIELD_GOLDEN_DETERMINISTIC_ONLY=1`; no live LLM. LLM-specific scenarios live under `fixtures/golden-llm/` (optional, cassette-only) and are **excluded** from v0.1 parity gate.
+
+**Target:** ≥ **50** scenarios for `v0.1.0`; ≥ **20** named in §9B.9 matrix must exist before tag.
+
+---
+
+### 9B.9 Golden test matrix
+
+Normative scenarios for v0.1. All use **baseline-deny**, **pii-guard**, or **change-window** packs unless noted. Expected `matchedRuleId` uses pack rule ids from Appendix A.
+
+| # | Scenario directory | Pack | Request gist | Expected decision | Expected rule id |
+|---|------------------|------|--------------|-------------------|------------------|
+| 1 | `allow-health` | baseline-deny | `health_check`, intent via tool_map | ALLOW | `allow-health` |
+| 2 | `allow-ping` | baseline-deny | `ping` | ALLOW | `allow-health` |
+| 3 | `block-secret-exposure` | baseline-deny | `send_email` + AWS key in body | BLOCK | `block-secret-exposure` |
+| 4 | `block-openai-key` | baseline-deny | `write_file` + `sk-proj-...` in content | BLOCK | `block-secret-exposure` |
+| 5 | `block-exfil-intent` | baseline-deny | intent `data.exfiltrate` (fixture forces via rules override) | BLOCK | `block-exfil` |
+| 6 | `challenge-delete-prod` | baseline-deny | `delete_resource`, env `production` | CHALLENGE | `challenge-delete-prod` |
+| 7 | `block-delete-staging-default` | baseline-deny | `delete_resource`, env `staging`, no allow rule | BLOCK | *(null — defaultVerdict)* |
+| 8 | `block-unknown-tool` | baseline-deny | `totally_unknown_tool` | BLOCK | *(null)* |
+| 9 | `block-unclassified-low-conf` | baseline-deny | empty args, unknown tool | BLOCK | *(null)* |
+| 10 | `allow-health-prod` | baseline-deny | `health_check`, env `production` | ALLOW | `allow-health` |
+| 11 | `block-secret-beats-challenge` | baseline-deny | `delete_resource` prod + secret in args | BLOCK | `block-secret-exposure` |
+| 12 | `priority-secret-over-exfil` | baseline-deny | both intents match; higher priority wins | BLOCK | `block-secret-exposure` |
+| 13 | `challenge-pii-email` | pii-guard | `send_email`, tag `data_class=pii` | CHALLENGE | `challenge-pii-email` |
+| 14 | `block-http-non-allowlist` | pii-guard | `http_request` to `https://evil.com` | BLOCK | `block-http-non-allowlist` |
+| 15 | `allow-http-allowlist` | pii-guard | `http_request` to `https://api.mycompany.com/x` | BLOCK | *(null — default deny)* |
+| 16 | `allow-infra-with-ticket` | change-window | `update_resource` prod + `change_ticket=INC-1` | ALLOW | `allow-infra-with-ticket` |
+| 17 | `challenge-infra-prod-no-ticket` | change-window | `create_resource`, env `production` | CHALLENGE | `challenge-infra-prod` |
+| 18 | `block-finance-transfer` | baseline-deny | `transfer_funds` tool_map intent | BLOCK | *(null)* |
+| 19 | `block-shell-exec` | baseline-deny | `run_shell` | BLOCK | *(null)* |
+| 20 | `min-confidence-blocks-weak` | custom inline policy | rule `minConfidence: 0.95`, primary 0.7 | BLOCK | *(null)* |
+| 21 | `tool-glob-send-wildcard` | custom inline | rule `tools: ["send_*"]` + `send_slack` | ALLOW | `allow-send-tools` |
+| 22 | `caller-id-match` | custom inline | `callers: ["ci-bot"]` | ALLOW | `allow-ci` |
+| 23 | `role-admin-allow` | custom inline | `roles: ["admin"]` on caller | ALLOW | `allow-admin` |
+| 24 | `expression-env-prod` | custom inline | `expression: env == "production"` | CHALLENGE | `expr-prod-challenge` |
+| 25 | `defers-verdict` | custom inline | rule verdict `DEFER` | DEFER | `defer-review` |
+| 26 | `disabled-rule-skipped` | custom inline | `enabled: false` on ALLOW rule | BLOCK | *(null)* |
+| 27 | `tie-priority-by-rule-id` | custom inline | two rules priority 200; lower id wins | BLOCK | `aaa-block` |
+
+Rows 15, 20–27 use minimal inline `policy:` in `policy-ref.yaml` where the shipped pack alone is insufficient.
+
+---
+
+### 9B.10 CLI I/O spec
+
+All commands: `lexshield [--config|-c PATH] <subcommand>`. Default config `./lexshield.yaml`. Global `--help` exits 0.
+
+#### `lexshield init`
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--pack` | choice | `baseline-deny` | `baseline-deny` \| `pii-guard` \| `change-window` |
+| `--force` | bool | false | Overwrite existing files |
+
+| Stream | Behavior |
+|--------|----------|
+| stdout | Lists created files: `lexshield.yaml`, `policy.yaml`, `rules.yaml`, `.gitignore` snippets |
+| stderr | Warnings if files skipped (no `--force`) |
+| exit 0 | Success |
+| exit 1 | Cwd not writable or pack unknown |
+| exit 2 | Partial write failure |
+
+#### `lexshield check`
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-c, --config` | path | `lexshield.yaml` | Config file (must exist) |
+| `--strict` | bool | false | Unknown fields → error; `defaultVerdict: ALLOW` → error |
+
+| Stream | Behavior |
+|--------|----------|
+| stdout | `rules: N`, `intents referenced: [...]`, warnings list |
+| stderr | Errors only |
+| exit 0 | Valid |
+| exit 1 | Validation errors |
+| exit 2 | Config file missing |
+
+#### `lexshield evaluate`
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--tool` | string | — | Tool name (required unless `--stdin`) |
+| `--args` | JSON string | `{}` | Tool arguments |
+| `--caller` | string | `anonymous` | Caller id |
+| `--caller-type` | choice | `agent` | `user` \| `agent` \| `service_account` |
+| `--env` | string | — | Sets `context.environment` |
+| `--stdin` | bool | false | Read full `ToolCallRequest` JSON |
+| `--json` | bool | false | Machine-readable verdict on stdout |
+| `-c, --config` | path | `lexshield.yaml` | Config path |
+
+| Stream | Behavior |
+|--------|----------|
+| stdout (`--json`) | Single JSON object: Verdict (camelCase aliases) |
+| stdout (TTY) | Colorized: `ALLOW` green, `BLOCK` red, `CHALLENGE` yellow + reason + rule id |
+| stderr | Config/load errors |
+| exit 0 | Evaluate completed (any verdict) |
+| exit 1 | Bad args JSON, missing `--tool`, config error |
+| exit 3 | Reserved: internal engine panic (should not happen) |
+
+**Note:** Exit code does **not** reflect BLOCK vs ALLOW — use `--json` + `jq` in CI scripts.
+
+#### `lexshield run` (reference)
+
+| exit 0 | Server started |
+| exit 1 | Bind refused / policy load failed |
+| exit 2 | `--host 0.0.0.0` without `--i-understand-bind-all` |
+
+---
+
+### 9B.11 FastAPI contracts
+
+Base URL: `http://127.0.0.1:8787`. Auth: if `LEXSHIELD_LOCAL_TOKEN` set, require `Authorization: Bearer <token>` else **401**.
+
+#### `POST /v1/shields/{shield_id}/evaluate` — success (200)
+
+Request:
+
+```json
+{
+  "caller": { "id": "agent-1", "type": "agent", "roles": ["support"] },
+  "tool": { "name": "send_email" },
+  "arguments": {
+    "to": "user@example.com",
+    "subject": "Hello",
+    "body": "AKIAIOSFODNN7EXAMPLE"
+  },
+  "context": { "environment": "production" }
+}
+```
+
+Response (200):
+
+```json
+{
+  "requestId": "01J8ZQXAMPLEEVAL0001",
+  "decision": "BLOCK",
+  "matchedRuleId": "block-secret-exposure",
+  "reason": "Possible secret exposure in tool arguments",
+  "classifications": [
+    {
+      "intent": "security.secret_exposure",
+      "confidence": 0.98,
+      "alternatives": [],
+      "classifier": "deterministic:v1"
+    }
+  ],
+  "durationMs": 2.4,
+  "policyVersion": "1"
+}
+```
+
+#### `POST /v1/shields/{shield_id}/execute` — denied (403)
+
+Same body as evaluate. When verdict ≠ `ALLOW`:
+
+```json
+{
+  "detail": {
+    "error": "lexshield_blocked",
+    "verdict": "BLOCK",
+    "reason": "Possible secret exposure in tool arguments",
+    "request_id": "01J8ZQXAMPLEEVAL0001",
+    "matched_rule_id": "block-secret-exposure",
+    "retryable": false
+  }
+}
+```
+
+**CHALLENGE** uses `"error": "lexshield_challenged"`; **DEFER** uses `"error": "lexshield_deferred"`. Field names in `detail` use **snake_case** per §9.7 (HTTP layer); SDK JSON uses camelCase aliases.
+
+#### Other status codes
+
+| Code | When |
+|------|------|
+| 400 | Malformed `ToolCallRequest` body |
+| 401 | Missing/invalid Bearer token |
+| 404 | `shield_id` not loaded |
+| 502 | Proxy upstream failure after ALLOW |
+
+---
+
+### 9B.12 `lexshield.yaml` — every field
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `version` | int | **required** `1` | Config schema version |
+| `shield.id` | string | `local` | Shield identifier; must match API `{shield_id}` |
+| `shield.name` | string | `local-shield` | Display name |
+| `shield.policy` | path | `./policy.yaml` | Policy file relative to config dir |
+| `shield.taxonomy` | path | built-in | Optional `taxonomy.yaml`; else use `taxonomy/builtin.py` |
+| `shield.classifiers` | list | `[{type: deterministic, path: ./rules.yaml}]` | Ordered classifier configs |
+| `shield.classifiers[].type` | enum | — | `deterministic` \| `llm` |
+| `shield.classifiers[].path` | path | — | For `deterministic`: `rules.yaml` path |
+| `shield.classifiers[].model` | string | `openai:gpt-4o-mini` | LLM model id |
+| `shield.classifiers[].base_url_env` | string | `OPENAI_BASE_URL` | Env var for API base |
+| `shield.classifiers[].api_key_env` | string | `OPENAI_API_KEY` | Env var for API key |
+| `shield.classifiers[].timeout_ms` | int | `2000` | LLM hard timeout |
+| `shield.classifiers[].redact` | bool | `true` | Redact args before LLM |
+| `shield.fail_on_classifier_error` | enum | `BLOCK` | `BLOCK` \| `CHALLENGE` \| `ALLOW` (warn on ALLOW) |
+| `shield.expose_rule_ids` | bool | `true` | Include rule ids in agent-facing errors |
+| `shield.redact.emails` | enum | `hash` | `hash` \| `redact` \| `off` — trace + LLM behavior |
+| `shield.trace_arguments` | enum | `redacted` | `redacted` \| `hash` \| `full` |
+| `shield.sinks` | list | `[{type: stdout}]` | Trace sinks |
+| `shield.sinks[].type` | enum | — | `stdout` \| `file` \| `http` \| `otlp` |
+| `shield.sinks[].path` | path | `./traces.ndjson` | For `file` sink |
+| `shield.sinks[].url` | string | — | For `http` / `otlp` |
+| `shield.proxy.enabled` | bool | `false` | Enable `/execute` forwarding |
+| `shield.proxy.upstreams` | map | `{}` | Tool name → upstream config |
+| `shield.proxy.upstreams.<tool>.url` | string | — | Forward URL (required if tool listed) |
+| `shield.proxy.upstreams.<tool>.timeoutMs` | int | `5000` | Upstream HTTP timeout |
+| `shield.proxy.upstreams.<tool>.headers` | map | `{}` | Extra headers |
+| `server.host` | string | `127.0.0.1` | Bind address |
+| `server.port` | int | `8787` | Bind port |
+| `server.token_env` | string | `LEXSHIELD_LOCAL_TOKEN` | Env var name for API token |
+
+---
+
+### 9B.13 Development commands
+
+From repository root:
+
+```bash
+# Install Python workspace (engine + CLI)
+uv sync
+
+# Lint Python
+uv run ruff check packages/engine-py packages/cli
+
+# Unit + golden tests (deterministic only)
+LEXSHIELD_GOLDEN_DETERMINISTIC_ONLY=1 uv run pytest packages/engine-py packages/cli -q
+
+# TypeScript engine
+pnpm install
+pnpm --filter @latticeag/lexshield test
+pnpm --filter @latticeag/lexshield test:golden
+
+# Policy validation (offline, no server)
+uv run lexshield check -c examples/python-block-exfil/lexshield.yaml
+uv run lexshield check --strict
+
+# One-shot evaluate
+uv run lexshield evaluate --tool health_check --args '{}' -c lexshield.yaml
+uv run lexshield evaluate --tool send_email --args '{"body":"AKIAIOSFODNN7EXAMPLE"}' --json
+
+# Start local API
+uv run lexshield run --host 127.0.0.1 --port 8787
+```
+
+**CI minimum:** `uv sync` → `ruff` → `pytest` with golden → `pnpm test:golden` → `lexshield check --strict` on all packs.
+
+---
+
+### 9B.14 Implementation phases (M1–M6)
+
+File-level deliverables per milestone. Scope authority: [§9](#9-v01-feature-freeze-specific).
+
+#### M1 — Policy engine + deterministic classifier
+
+| Deliverable | Files |
+|-------------|-------|
+| Policy load + strict mode | `policy/loader.py`, `config/loader.py` |
+| Glob matcher | `policy/glob.py` |
+| Expression parser | `policy/expressions.py` |
+| Full `PolicyEngine.evaluate` | `policy/engine.py` |
+| Deterministic classifier complete | `classifiers/deterministic.py` |
+| Severity merge | `classifiers/severity.py`, `taxonomy/builtin.py` |
+| Golden runner + 10 scenarios | `tests/test_golden.py`, `fixtures/golden/*` |
+| CLI `check` real validation | `commands/check.py` |
+
+**Exit:** `pytest test_golden` green for scenarios 1–10; `lexshield check` on packs exits 0.
+
+#### M2 — Python SDK + local API
+
+| Deliverable | Files |
+|-------------|-------|
+| `Shield.evaluate` wired end-to-end | `shield.py` |
+| `@shield.guard` + exceptions | `shield.py`, `errors.py` |
+| Redaction | `redaction.py` |
+| FastAPI `/evaluate`, `/healthz`, `/readyz` | `server/app.py` |
+| Trace NDJSON sink | `traces/sink.py` |
+| Block exfil demo | `examples/python-block-exfil/` |
+
+**Exit:** Demo 1 (block exfil) runs deterministic-only.
+
+#### M3 — LLM classifier + taxonomy
+
+| Deliverable | Files |
+|-------------|-------|
+| LLM classifier + timeout | `classifiers/llm.py` |
+| Pipeline merge | `classifiers/pipeline.py` |
+| VCR cassette tests | `tests/test_classifiers.py`, `tests/cassettes/` |
+| Fingerprint cache (optional M3) | `classifiers/cache.py` |
+
+**Exit:** Cassette tests pass; no live key in CI.
+
+#### M4 — CLI + traces + challenges
+
+| Deliverable | Files |
+|-------------|-------|
+| `init`, `evaluate`, `run` complete | `commands/init.py`, `evaluate.py`, `run.py` |
+| `traces list/show` | `commands/traces.py` |
+| Challenge store + CLI | `challenges/store.py`, `commands/challenge.py` |
+| API challenge routes | `server/app.py` |
+| Golden scenarios 11–20 | `fixtures/golden/*` |
+
+**Exit:** 5-minute quickstart (README) verified offline.
+
+#### M5 — TypeScript SDK + proxy
+
+| Deliverable | Files |
+|-------------|-------|
+| TS policy engine parity | `engine-ts/src/policy/*` |
+| TS shield + guard | `engine-ts/src/shield.ts` |
+| Golden 100% match | `engine-ts/tests/golden.test.ts` |
+| Proxy execute | `server/proxy.py`, `/execute` in `app.py` |
+| `examples/ts-evaluate` | `examples/ts-evaluate/` |
+
+**Exit:** `pnpm test:golden` matches Python on all deterministic fixtures.
+
+#### M6 — Docs, packs, polish
+
+| Deliverable | Files |
+|-------------|-------|
+| 3 packs finalized | `packs/*` |
+| 3 demos runnable | `examples/*` |
+| Golden ≥ 50 scenarios | `fixtures/golden/*` |
+| Docs | `docs/*.md`, README |
+| CI example | `.github/workflows/lexshield-check.example.yml` |
+| Appendix D checklist green | — |
+
+**Exit:** Tag `v0.1.0` on PyPI + npm.
+
+---
+
+### 9B.15 TypeScript parity rules
+
+TypeScript (`@latticeag/lexshield`) must match Python on shared deterministic paths:
+
+| Area | Must match bit-for-bit |
+|------|------------------------|
+| Golden `decision` | Yes — exact enum string |
+| Golden `matchedRuleId` | Yes — including JSON `null` |
+| Golden `reason` | Yes — exact string |
+| Golden `primaryIntent` | Yes — after same merge algorithm |
+| Rule priority + tie-break | Yes — same winner rule |
+| Glob `fnmatch` `*` semantics | Yes — same match results for all fixture tool names |
+| Expression truth | Yes — all §9B.4 examples + every expression in packs |
+| `unknown.unclassified` fallback | Yes — same confidence 0.3 when no det hit |
+| Deterministic confidences | Yes — tool_map 0.7, pattern from yaml |
+| `defaultVerdict` when no match | Yes |
+| JSON field aliases | camelCase in serialized Verdict (`requestId`, `matchedRuleId`, …) |
+
+| Area | May differ |
+|------|------------|
+| `durationMs` | Floating timing — not compared in golden |
+| `challengeId` | ULID generation timing |
+| LLM classifications | TS may skip LLM in v0.1; not in golden CI |
+| Internal class names | — |
+| CLI / FastAPI / challenge file store | TS not required (HTTP client optional) |
+
+**Process:** Any change to `policy/engine.py`, `expressions.py`, `glob.py`, or `severity.py` requires synchronized TS edit + golden run in the same PR.
 
 ---
 
@@ -1735,6 +2491,7 @@ Ship `v0.1.0` only when all boxes pass:
 | 0.2 | 2026-07-11 | Expanded planning SPEC |
 | 0.3 | 2026-07-11 | OSS-first lock; SaaS deferred |
 | 0.4 | 2026-07-11 | **v0.1 feature freeze**: exact IN/OUT, demos, expressions, redaction, packs YAML, acceptance checklist |
+| 0.5 | 2026-07-11 | **§9B OSS v0.1 implementation spec**: module map, PolicyEngine algorithm, rule matching, expression grammar, globs, classifier pipeline, Shield.evaluate sequence, golden contract + 27-scenario matrix, CLI I/O, FastAPI contracts, lexshield.yaml fields, dev commands, M1–M6 file deliverables, TS parity rules |
 
 ---
 

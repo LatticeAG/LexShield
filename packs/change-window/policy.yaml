@@ -13,7 +13,7 @@ rules:
     reason: "Health checks are always allowed"
 
   - id: allow-infra-with-ticket
-    priority: 180
+    priority: 210
     match:
       environments: ["production"]
       intents: ["infra.mutate.resource", "infra.provision.resource"]

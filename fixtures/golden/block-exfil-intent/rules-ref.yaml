@@ -1,0 +1,31 @@
+version: 1
+tool_map:
+  health_check: network.request.health
+  ping: network.request.health
+  send_email: comms.send.email
+  send_slack: comms.send.slack
+  http_request: network.request.http
+  execute_sql: data.query.sql
+  delete_resource: infra.delete.resource
+  create_resource: infra.provision.resource
+  update_resource: infra.mutate.resource
+  create_charge: finance.charge.create
+  transfer_funds: finance.transfer.create
+  run_shell: code.execute.shell
+  write_file: code.write.repo
+patterns:
+  - name: aws_access_key
+    match:
+      any_arg_regex: "AKIA[0-9A-Z]{16}"
+    intent: security.secret_exposure
+    confidence: 0.98
+  - name: openai_sk
+    match:
+      any_arg_regex: "sk-(proj-)?[a-zA-Z0-9]{20,}"
+    intent: security.secret_exposure
+    confidence: 0.98
+  - name: bulk_customer_export
+    match:
+      any_arg_regex: "(?i)export.*customer"
+    intent: data.exfiltrate
+    confidence: 0.95

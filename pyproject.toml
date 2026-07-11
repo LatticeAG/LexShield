@@ -46,4 +46,5 @@ addopts = "-ra --strict-markers"
 markers = [
     "slow: marks tests as slow",
     "integration: marks integration tests",
+    "golden: golden fixture regression tests",
 ]

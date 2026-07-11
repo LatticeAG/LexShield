@@ -1,0 +1,6 @@
+{
+  "decision": "CHALLENGE",
+  "matchedRuleId": "challenge-delete-prod",
+  "reason": "Destructive action in production requires approval",
+  "primaryIntent": "infra.delete.resource"
+}

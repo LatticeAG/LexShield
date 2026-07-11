@@ -1,0 +1,6 @@
+{
+  "decision": "BLOCK",
+  "matchedRuleId": "high-priority-block",
+  "reason": "High priority rule wins",
+  "primaryIntent": "unknown.unclassified"
+}

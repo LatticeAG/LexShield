@@ -2,6 +2,11 @@
 .lexshield/
 traces.ndjson
 
+# Accidental init at repo root during development
+/lexshield.yaml
+/policy.yaml
+/rules.yaml
+
 # Python
 __pycache__/
 *.py[cod]
