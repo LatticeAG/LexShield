@@ -75,6 +75,7 @@ See [examples/README.md](./examples/README.md) and [docs/cli.md](./docs/cli.md).
 | [docs/intents.md](./docs/intents.md) | Intent catalog |
 | [docs/sdk-python.md](./docs/sdk-python.md) | Python SDK |
 | [docs/sdk-typescript.md](./docs/sdk-typescript.md) | TypeScript SDK |
+| [docs/integrations.md](./docs/integrations.md) | Framework adapters (contrib) |
 | [docs/cli.md](./docs/cli.md) | CLI reference |
 | [docs/security.md](./docs/security.md) | Threat model |
 
@@ -85,6 +86,10 @@ See [examples/README.md](./examples/README.md) and [docs/cli.md](./docs/cli.md).
 | [python-block-exfil](./examples/python-block-exfil/) | `BLOCK` on AWS key in `send_email` |
 | [python-challenge-delete](./examples/python-challenge-delete/) | `CHALLENGE` prod delete + CLI approve |
 | [ts-evaluate](./examples/ts-evaluate/) | TypeScript `evaluate()` demo |
+
+## Framework adapters (contrib)
+
+Community copy-paste patterns for Vercel AI SDK, LangChain, and OpenAI Agents — **not officially supported**. See [contrib/](./contrib/) and [docs/integrations.md](./docs/integrations.md).
 
 ## Monorepo layout
 
