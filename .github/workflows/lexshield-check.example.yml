@@ -1,0 +1,49 @@
+# Example workflow: validate policy packs in CI.
+# Copy to .github/workflows/lexshield-check.yml once the CLI is published.
+
+name: LexShield Policy Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packs/**"
+      - "schemas/**"
+      - "lexshield.yaml"
+      - "policy.yaml"
+      - "rules.yaml"
+  pull_request:
+    paths:
+      - "packs/**"
+      - "schemas/**"
+      - "lexshield.yaml"
+      - "policy.yaml"
+      - "rules.yaml"
+
+jobs:
+  lexshield-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install LexShield CLI
+        run: pip install lexshield
+
+      - name: Validate shipped policy packs
+        run: |
+          for pack in baseline-deny pii-guard change-window; do
+            echo "Checking pack: $pack"
+            lexshield check \
+              --policy "packs/${pack}/policy.yaml" \
+              --rules "packs/${pack}/rules.yaml" \
+              --strict
+          done
+
+      - name: Validate root policy (if present)
+        if: hashFiles('lexshield.yaml') != ''
+        run: lexshield check --strict

@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lexshield.dev/schemas/trace.schema.json",
+  "title": "LexShield Trace",
+  "description": "NDJSON audit trace event. See SPEC Appendix C.",
+  "type": "object",
+  "required": ["id", "ts", "shieldId", "request", "classifications", "verdict", "outcome"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Trace event ULID"
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "shieldId": {
+      "type": "string"
+    },
+    "request": {
+      "type": "object",
+      "required": ["id", "caller", "tool", "arguments_redacted", "context"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "caller": {
+          "type": "object",
+          "required": ["id", "type"],
+          "additionalProperties": true,
+          "properties": {
+            "id": { "type": "string" },
+            "type": { "type": "string" },
+            "roles": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "tool": {
+          "type": "object",
+          "required": ["name"],
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string" },
+            "namespace": { "type": "string" },
+            "version": { "type": "string" }
+          }
+        },
+        "arguments_redacted": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Redacted copy of tool arguments"
+        },
+        "context": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "classifications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["intent", "confidence", "classifier", "alternatives"],
+        "additionalProperties": false,
+        "properties": {
+          "intent": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "classifier": { "type": "string" },
+          "alternatives": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["intent", "confidence"],
+              "additionalProperties": false,
+              "properties": {
+                "intent": { "type": "string" },
+                "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+              }
+            }
+          },
+          "reasoning": { "type": "string" }
+        }
+      }
+    },
+    "verdict": {
+      "type": "object",
+      "required": ["decision", "reason", "durationMs"],
+      "additionalProperties": false,
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": ["ALLOW", "BLOCK", "CHALLENGE", "DEFER"]
+        },
+        "matchedRuleId": { "type": "string" },
+        "reason": { "type": "string" },
+        "durationMs": { "type": "number", "minimum": 0 },
+        "policyVersion": { "type": "string" },
+        "challengeId": { "type": "string" }
+      }
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "EXECUTED",
+        "BLOCKED",
+        "CHALLENGED",
+        "DEFERRED",
+        "ERROR",
+        "APPROVED_EXECUTED",
+        "DENIED"
+      ]
+    },
+    "outcomeAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "redactions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Fields or patterns redacted in this trace"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

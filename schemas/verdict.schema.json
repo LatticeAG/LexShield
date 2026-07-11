@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lexshield.dev/schemas/verdict.schema.json",
+  "title": "LexShield Verdict",
+  "description": "Policy evaluation result returned to callers. See SPEC §19.",
+  "type": "object",
+  "required": ["requestId", "decision", "reason", "classifications", "durationMs"],
+  "additionalProperties": false,
+  "properties": {
+    "requestId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "decision": {
+      "$ref": "#/$defs/VerdictType"
+    },
+    "matchedRuleId": {
+      "type": "string",
+      "description": "Winning policy rule id, if any"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "classifications": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Classification"
+      }
+    },
+    "durationMs": {
+      "type": "number",
+      "minimum": 0
+    },
+    "challengeId": {
+      "type": "string",
+      "description": "Present when decision is CHALLENGE or DEFER"
+    },
+    "policyVersion": {
+      "type": "string"
+    }
+  },
+  "$defs": {
+    "VerdictType": {
+      "type": "string",
+      "enum": ["ALLOW", "BLOCK", "CHALLENGE", "DEFER"]
+    },
+    "Classification": {
+      "type": "object",
+      "required": ["intent", "confidence", "alternatives", "classifier"],
+      "additionalProperties": false,
+      "properties": {
+        "intent": {
+          "type": "string",
+          "minLength": 1
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "alternatives": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["intent", "confidence"],
+            "additionalProperties": false,
+            "properties": {
+              "intent": { "type": "string" },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+            }
+          }
+        },
+        "classifier": {
+          "type": "string",
+          "description": "e.g. deterministic:v1, llm:openai:gpt-4o-mini"
+        },
+        "reasoning": {
+          "type": "string"
+        },
+        "signalsUsed": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}
