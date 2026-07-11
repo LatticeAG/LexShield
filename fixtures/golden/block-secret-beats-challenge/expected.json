@@ -1,0 +1,6 @@
+{
+  "decision": "BLOCK",
+  "reason": "Possible secret exposure in tool arguments",
+  "primaryIntent": "security.secret_exposure",
+  "matchedRuleId": "block-secret-exposure"
+}

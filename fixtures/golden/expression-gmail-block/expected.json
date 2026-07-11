@@ -1,0 +1,6 @@
+{
+  "decision": "BLOCK",
+  "matchedRuleId": "block-gmail-prod",
+  "reason": "Gmail not allowed in production",
+  "primaryIntent": "comms.send.email"
+}

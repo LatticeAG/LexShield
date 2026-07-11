@@ -1,0 +1,18 @@
+{
+  "id": "01JFIXTUREDEFERSVERDICT01",
+  "shieldId": "local",
+  "timestamp": "2026-07-11T12:00:00.000Z",
+  "caller": {
+    "id": "agent-1",
+    "type": "agent"
+  },
+  "tool": {
+    "name": "update_resource"
+  },
+  "arguments": {
+    "resource_id": "svc-2"
+  },
+  "context": {
+    "environment": "staging"
+  }
+}

@@ -1,0 +1,49 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: baseline-deny-staging-delete
+  name: Baseline with staging delete allow
+  defaultVerdict: BLOCK
+  rules:
+    - id: allow-health
+      name: Allow health checks
+      priority: 100
+      match:
+        tools: ["health_check", "ping"]
+        intents: ["network.request.health"]
+      verdict: ALLOW
+      reason: "Health checks are always allowed"
+    - id: allow-staging-delete
+      name: Allow deletes in non-production
+      priority: 150
+      match:
+        environments: ["staging", "development"]
+        intents: ["infra.delete.resource"]
+      verdict: ALLOW
+      reason: "Non-production deletes are allowed"
+    - id: challenge-delete-prod
+      name: Challenge destructive actions in production
+      priority: 200
+      match:
+        environments: ["production"]
+        intents: ["infra.delete.resource", "data.delete.record"]
+      verdict: CHALLENGE
+      reason: "Destructive action in production requires approval"
+      challenge:
+        channel: stdout
+        timeoutSeconds: 3600
+        onTimeout: BLOCK
+    - id: block-secret-exposure
+      name: Block secret exposure
+      priority: 300
+      match:
+        intents: ["security.secret_exposure"]
+      verdict: BLOCK
+      reason: "Possible secret exposure in tool arguments"
+    - id: block-exfil
+      name: Block exfiltration
+      priority: 300
+      match:
+        intents: ["data.exfiltrate"]
+      verdict: BLOCK
+      reason: "Possible data exfiltration"

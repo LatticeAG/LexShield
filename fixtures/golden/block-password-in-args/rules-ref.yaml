@@ -1,0 +1,9 @@
+version: 1
+tool_map:
+  write_file: code.write.repo
+patterns:
+- name: password_literal
+  match:
+    any_arg_regex: (?i)password\s*[:=]\s*\S+
+  intent: security.secret_exposure
+  confidence: 0.96

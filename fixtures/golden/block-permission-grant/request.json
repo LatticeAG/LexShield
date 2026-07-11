@@ -1,0 +1,19 @@
+{
+  "id": "01JFIXTUREBLOCKPERMGRNT01",
+  "shieldId": "local",
+  "timestamp": "2026-07-11T12:00:00.000Z",
+  "caller": {
+    "id": "agent-1",
+    "type": "agent"
+  },
+  "tool": {
+    "name": "grant_role"
+  },
+  "arguments": {
+    "role": "admin",
+    "user_id": "contractor-1"
+  },
+  "context": {
+    "environment": "production"
+  }
+}

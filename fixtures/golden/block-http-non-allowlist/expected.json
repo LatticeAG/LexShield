@@ -1,0 +1,6 @@
+{
+  "decision": "BLOCK",
+  "matchedRuleId": "block-http-non-allowlist",
+  "reason": "HTTP to non-allowlisted host",
+  "primaryIntent": "network.request.http"
+}

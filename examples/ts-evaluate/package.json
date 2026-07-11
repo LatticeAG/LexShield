@@ -1,0 +1,14 @@
+{
+  "name": "lexshield-example-ts-evaluate",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@latticeag/lexshield": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  },
+  "scripts": {
+    "start": "tsx index.ts"
+  }
+}

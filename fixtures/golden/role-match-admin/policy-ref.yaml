@@ -1,0 +1,15 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: role-match-admin
+  name: Role admin allow fixture
+  defaultVerdict: BLOCK
+  rules:
+    - id: allow-admin
+      name: Allow admin role
+      priority: 200
+      match:
+        roles: ["admin"]
+        intents: ["infra.delete.resource"]
+      verdict: ALLOW
+      reason: "Admin role permitted for destructive actions"

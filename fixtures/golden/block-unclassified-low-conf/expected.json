@@ -1,0 +1,5 @@
+{
+  "decision": "BLOCK",
+  "reason": "No matching policy rule; default deny for unclassified intent",
+  "primaryIntent": "unknown.unclassified"
+}

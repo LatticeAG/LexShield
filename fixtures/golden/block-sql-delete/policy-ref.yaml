@@ -1,0 +1,15 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: block-sql-delete
+  name: Block SQL delete statements
+  defaultVerdict: ALLOW
+  rules:
+  - id: block-sql-delete
+    name: Block SQL delete
+    priority: 300
+    match:
+      intents:
+      - data.delete.record
+    verdict: BLOCK
+    reason: SQL DELETE statements are blocked

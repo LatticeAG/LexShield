@@ -1,0 +1,22 @@
+{
+  "id": "01JFIXTUREALLOWCHANGETICKET01",
+  "shieldId": "local",
+  "timestamp": "2026-07-11T12:00:00.000Z",
+  "caller": {
+    "id": "agent-1",
+    "type": "agent"
+  },
+  "tool": {
+    "name": "create_resource"
+  },
+  "arguments": {
+    "resource_type": "database",
+    "name": "analytics-replica"
+  },
+  "context": {
+    "environment": "production",
+    "tags": {
+      "change_ticket": "INC-1234"
+    }
+  }
+}

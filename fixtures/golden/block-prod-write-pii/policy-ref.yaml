@@ -1,0 +1,20 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: block-prod-write-pii
+  name: Block PII writes in production
+  defaultVerdict: ALLOW
+  rules:
+  - id: block-prod-write-pii
+    name: Block prod PII writes
+    priority: 280
+    match:
+      intents:
+      - data.write.record
+      environments:
+      - production
+      tags:
+        data_class:
+        - pii
+    verdict: BLOCK
+    reason: PII writes are blocked in production

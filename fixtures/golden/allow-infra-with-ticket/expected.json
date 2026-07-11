@@ -1,0 +1,6 @@
+{
+  "decision": "ALLOW",
+  "matchedRuleId": "allow-infra-with-ticket",
+  "reason": "Change ticket present",
+  "primaryIntent": "infra.mutate.resource"
+}

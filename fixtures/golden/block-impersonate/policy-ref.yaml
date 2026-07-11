@@ -1,0 +1,15 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: block-impersonate
+  name: Block impersonation
+  defaultVerdict: BLOCK
+  rules:
+  - id: block-impersonate
+    name: Block impersonation
+    priority: 250
+    match:
+      intents:
+      - identity.auth.impersonate
+    verdict: BLOCK
+    reason: Impersonation is not permitted

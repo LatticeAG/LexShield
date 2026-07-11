@@ -1,0 +1,41 @@
+version: 1
+id: change-window
+name: Infra change window
+description: Infra mutate/provision in production requires change_ticket tag; otherwise challenge.
+defaultVerdict: BLOCK
+rules:
+  - id: allow-health
+    priority: 100
+    match:
+      tools: ["health_check", "ping"]
+      intents: ["network.request.health"]
+    verdict: ALLOW
+    reason: "Health checks are always allowed"
+
+  - id: allow-infra-with-ticket
+    priority: 210
+    match:
+      environments: ["production"]
+      intents: ["infra.mutate.resource", "infra.provision.resource"]
+      expression: 'tags.change_ticket != ""'
+    verdict: ALLOW
+    reason: "Change ticket present"
+
+  - id: challenge-infra-prod
+    priority: 200
+    match:
+      environments: ["production"]
+      intents: ["infra.mutate.resource", "infra.provision.resource", "infra.delete.resource"]
+    verdict: CHALLENGE
+    reason: "Production infra change requires approval"
+    challenge:
+      channel: stdout
+      timeoutSeconds: 3600
+      onTimeout: BLOCK
+
+  - id: block-secret-exposure
+    priority: 300
+    match:
+      intents: ["security.secret_exposure"]
+    verdict: BLOCK
+    reason: "Possible secret exposure in tool arguments"

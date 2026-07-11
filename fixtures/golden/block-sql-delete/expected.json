@@ -1,0 +1,5 @@
+{
+  "decision": "ALLOW",
+  "reason": "No matching rule; applied default verdict ALLOW",
+  "primaryIntent": "data.query.sql"
+}

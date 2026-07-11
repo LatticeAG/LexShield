@@ -1,0 +1,3 @@
+version: 1
+tool_map:
+  impersonate_user: identity.auth.impersonate

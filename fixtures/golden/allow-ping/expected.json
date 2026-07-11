@@ -1,0 +1,6 @@
+{
+  "decision": "ALLOW",
+  "reason": "Health checks are always allowed",
+  "primaryIntent": "network.request.health",
+  "matchedRuleId": "allow-health"
+}

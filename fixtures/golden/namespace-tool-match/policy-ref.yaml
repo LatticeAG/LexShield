@@ -1,0 +1,14 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: namespace-tool-match
+  name: Namespace expression match
+  defaultVerdict: BLOCK
+  rules:
+  - id: allow-billing-namespace
+    name: Allow billing namespace tools
+    priority: 150
+    match:
+      expression: tool.namespace == "billing"
+    verdict: ALLOW
+    reason: Billing namespace tools are allowed

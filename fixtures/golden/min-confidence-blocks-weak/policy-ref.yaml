@@ -1,0 +1,16 @@
+rules: rules-ref.yaml
+policy:
+  version: 1
+  id: min-confidence-blocks-weak
+  name: Min confidence blocks weak classification
+  defaultVerdict: BLOCK
+  rules:
+  - id: allow-high-confidence-email
+    name: Allow high-confidence email
+    priority: 100
+    match:
+      intents:
+      - comms.send.email
+      minConfidence: 0.95
+    verdict: ALLOW
+    reason: High-confidence email allowed

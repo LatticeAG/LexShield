@@ -1,0 +1,19 @@
+{
+  "id": "01JFIXTUREROLEMATCHADMIN01",
+  "shieldId": "local",
+  "timestamp": "2026-07-11T12:00:00.000Z",
+  "caller": {
+    "id": "admin-user-1",
+    "type": "user",
+    "roles": ["admin"]
+  },
+  "tool": {
+    "name": "delete_resource"
+  },
+  "arguments": {
+    "resource_id": "legacy-service"
+  },
+  "context": {
+    "environment": "production"
+  }
+}

@@ -1,0 +1,20 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: expression-env-prod
+  name: Expression env production challenge
+  defaultVerdict: BLOCK
+  rules:
+  - id: expr-prod-challenge
+    name: Challenge in production
+    priority: 200
+    match:
+      intents:
+      - infra.mutate.resource
+      expression: env == "production"
+    verdict: CHALLENGE
+    reason: Production mutations require approval
+    challenge:
+      channel: stdout
+      timeoutSeconds: 3600
+      onTimeout: BLOCK

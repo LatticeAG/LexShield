@@ -1,0 +1,51 @@
+[project]
+name = "lexshield-monorepo"
+version = "0.0.0"
+description = "LexShield — open-source agent intent router and policy firewall"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [{ name = "LatticeAG" }]
+dependencies = [
+    "lexshield-cli",
+]
+
+[tool.uv.sources]
+lexshield-cli = { workspace = true }
+
+[tool.uv.workspace]
+members = [
+    "packages/engine-py",
+    "packages/cli",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+    "respx>=0.21",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["packages/engine-py", "packages/cli"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["lexshield"]
+
+[tool.pytest.ini_options]
+testpaths = ["packages/engine-py", "packages/cli"]
+pythonpath = ["packages/engine-py/src", "packages/cli/src"]
+asyncio_mode = "auto"
+addopts = "-ra --strict-markers"
+markers = [
+    "slow: marks tests as slow",
+    "integration: marks integration tests",
+    "golden: golden fixture regression tests",
+]

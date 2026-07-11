@@ -1,0 +1,19 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: challenge-defer-timeout
+  name: Challenge defer on timeout
+  defaultVerdict: BLOCK
+  rules:
+  - id: challenge-defer-on-timeout
+    name: Challenge with defer timeout
+    priority: 200
+    match:
+      intents:
+      - infra.delete.resource
+    verdict: CHALLENGE
+    reason: Delete requires timed approval
+    challenge:
+      channel: stdout
+      timeoutSeconds: 300
+      onTimeout: DEFER

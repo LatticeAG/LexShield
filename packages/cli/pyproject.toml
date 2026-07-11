@@ -1,0 +1,57 @@
+[project]
+name = "lexshield-cli"
+version = "0.1.0"
+description = "LexShield CLI — agent intent router and policy firewall"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [{ name = "LatticeAG" }]
+keywords = [
+    "ai",
+    "agents",
+    "cli",
+    "policy",
+    "security",
+    "lexshield",
+    "tool-calls",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: System :: Systems Administration",
+    "Typing :: Typed",
+]
+dependencies = [
+    "lexshield",
+    "typer>=0.12",
+    "rich>=13",
+    "uvicorn>=0.30",
+]
+
+[project.urls]
+Homepage = "https://github.com/latticeag/lexshield"
+Documentation = "https://github.com/latticeag/lexshield/blob/main/docs/cli.md"
+Repository = "https://github.com/latticeag/lexshield"
+Changelog = "https://github.com/latticeag/lexshield/blob/main/CHANGELOG.md"
+Issues = "https://github.com/latticeag/lexshield/issues"
+
+[project.scripts]
+lexshield = "lexshield_cli.main:app"
+lexshield-check-packs = "lexshield_cli.scripts.check_packs:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lexshield_cli"]
+
+[tool.uv.sources]
+lexshield = { workspace = true }

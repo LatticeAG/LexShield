@@ -1,0 +1,15 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: block-transfer-funds
+  name: Explicit block transfer funds
+  defaultVerdict: ALLOW
+  rules:
+  - id: block-transfer-funds
+    name: Block fund transfers
+    priority: 300
+    match:
+      intents:
+      - finance.transfer.create
+    verdict: BLOCK
+    reason: Fund transfers are blocked by policy

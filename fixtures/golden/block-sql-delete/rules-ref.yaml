@@ -1,0 +1,9 @@
+version: 1
+tool_map:
+  execute_sql: data.query.sql
+patterns:
+- name: sql_delete
+  match:
+    arg_regex:query: (?i)\bDELETE\b
+  intent: data.delete.record
+  confidence: 0.92

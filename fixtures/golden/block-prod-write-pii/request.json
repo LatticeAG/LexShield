@@ -1,0 +1,22 @@
+{
+  "id": "01JFIXTUREBLOCKPRODPII01",
+  "shieldId": "local",
+  "timestamp": "2026-07-11T12:00:00.000Z",
+  "caller": {
+    "id": "agent-1",
+    "type": "agent"
+  },
+  "tool": {
+    "name": "write_record"
+  },
+  "arguments": {
+    "table": "customers",
+    "email": "user@example.com"
+  },
+  "context": {
+    "environment": "production",
+    "tags": {
+      "data_class": "pii"
+    }
+  }
+}

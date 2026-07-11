@@ -1,0 +1,5 @@
+{
+  "decision": "BLOCK",
+  "reason": "No matching rule; applied default verdict BLOCK",
+  "primaryIntent": "comms.send.email"
+}

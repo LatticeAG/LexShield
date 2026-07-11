@@ -1,0 +1,15 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: glob-tool-send
+  name: Glob tool send fixture
+  defaultVerdict: BLOCK
+  rules:
+    - id: allow-send-tools
+      name: Allow send_* tools
+      priority: 100
+      match:
+        tools: ["send_*"]
+        intents: ["comms.send.slack", "comms.send.email"]
+      verdict: ALLOW
+      reason: "Send tools are allowed"

@@ -1,0 +1,11 @@
+{
+  "name": "lexshield-contrib-vercel-ai-sdk",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@latticeag/lexshield": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  }
+}

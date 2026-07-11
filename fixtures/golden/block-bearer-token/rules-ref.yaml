@@ -1,0 +1,9 @@
+version: 1
+tool_map:
+  http_request: network.request.http
+patterns:
+- name: bearer_token
+  match:
+    any_arg_regex: (?i)bearer\s+[a-zA-Z0-9._-]{20,}
+  intent: security.secret_exposure
+  confidence: 0.97

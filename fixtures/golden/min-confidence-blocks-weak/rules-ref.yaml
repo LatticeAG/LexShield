@@ -1,0 +1,9 @@
+version: 1
+tool_map:
+  send_email: comms.send.email
+patterns:
+- name: weak_email_signal
+  match:
+    any_arg_regex: (?i)maybe email
+  intent: comms.send.email
+  confidence: 0.7

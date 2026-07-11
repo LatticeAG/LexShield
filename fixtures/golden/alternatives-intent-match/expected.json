@@ -1,0 +1,6 @@
+{
+  "decision": "BLOCK",
+  "reason": "Possible data exfiltration",
+  "primaryIntent": "comms.send.email",
+  "matchedRuleId": "block-exfil-alt"
+}

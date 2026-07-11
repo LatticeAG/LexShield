@@ -1,0 +1,15 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: alternatives-intent-match
+  name: Alternative intent match
+  defaultVerdict: BLOCK
+  rules:
+  - id: block-exfil-alt
+    name: Block exfil via alternative intent
+    priority: 300
+    match:
+      intents:
+      - data.exfiltrate
+    verdict: BLOCK
+    reason: Possible data exfiltration

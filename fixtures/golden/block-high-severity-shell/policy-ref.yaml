@@ -1,0 +1,3 @@
+pack: baseline-deny
+policy: ../../../packs/baseline-deny/policy.yaml
+rules: ../../../packs/baseline-deny/rules.yaml

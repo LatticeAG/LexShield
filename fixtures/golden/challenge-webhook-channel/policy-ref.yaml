@@ -1,0 +1,19 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: challenge-webhook-channel
+  name: Webhook challenge channel
+  defaultVerdict: BLOCK
+  rules:
+  - id: challenge-webhook
+    name: Webhook challenge
+    priority: 200
+    match:
+      intents:
+      - infra.provision.resource
+    verdict: CHALLENGE
+    reason: Provisioning requires webhook approval
+    challenge:
+      channel: webhook
+      timeoutSeconds: 1800
+      onTimeout: BLOCK

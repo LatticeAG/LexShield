@@ -1,0 +1,6 @@
+{
+  "decision": "CHALLENGE",
+  "matchedRuleId": "challenge-infra-prod",
+  "reason": "Production infra change requires approval",
+  "primaryIntent": "infra.provision.resource"
+}

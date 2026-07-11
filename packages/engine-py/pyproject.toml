@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lexshield"
+version = "0.1.0"
+description = "The open-source policy firewall for agent tool calls"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "LatticeAG" }]
+keywords = [
+    "ai",
+    "agents",
+    "policy",
+    "security",
+    "firewall",
+    "tool-calls",
+    "llm",
+    "guardrails",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pydantic>=2",
+    "pyyaml",
+    "httpx",
+    "fastapi",
+    "uvicorn",
+    "ulid-py",
+]
+
+[project.urls]
+Homepage = "https://github.com/latticeag/lexshield"
+Documentation = "https://github.com/latticeag/lexshield#readme"
+Repository = "https://github.com/latticeag/lexshield"
+Changelog = "https://github.com/latticeag/lexshield/blob/main/CHANGELOG.md"
+Issues = "https://github.com/latticeag/lexshield/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "golden: golden fixture regression tests",
+]

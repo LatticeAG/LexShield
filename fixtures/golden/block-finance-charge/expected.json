@@ -1,0 +1,6 @@
+{
+  "decision": "BLOCK",
+  "matchedRuleId": "block-finance-charge",
+  "reason": "Finance charges are not permitted",
+  "primaryIntent": "finance.charge.create"
+}

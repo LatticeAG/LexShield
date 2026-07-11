@@ -1,0 +1,40 @@
+{
+  "name": "@latticeag/lexshield",
+  "version": "0.1.0",
+  "description": "LexShield — open-source agent intent router and policy firewall (TypeScript SDK)",
+  "license": "MIT",
+  "author": "LatticeAG",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:golden": "vitest run tests/golden.test.ts",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "yaml": "^2.8.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

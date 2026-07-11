@@ -1,0 +1,24 @@
+{
+  "id": "01JFIXTUREALLOWINFRA01",
+  "shieldId": "local",
+  "timestamp": "2026-07-11T12:00:00.000Z",
+  "caller": {
+    "id": "agent-1",
+    "type": "agent"
+  },
+  "tool": {
+    "name": "update_resource"
+  },
+  "arguments": {
+    "resource_id": "api-gateway",
+    "changes": {
+      "rate_limit": 1000
+    }
+  },
+  "context": {
+    "environment": "production",
+    "tags": {
+      "change_ticket": "CHG-12345"
+    }
+  }
+}

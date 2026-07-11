@@ -1,0 +1,6 @@
+{
+  "decision": "CHALLENGE",
+  "matchedRuleId": "challenge-pii-slack",
+  "reason": "Sending PII via Slack requires approval",
+  "primaryIntent": "comms.send.slack"
+}

@@ -1,0 +1,18 @@
+{
+  "id": "01JFIXTUREBLOCKDELSTG01",
+  "shieldId": "local",
+  "timestamp": "2026-07-11T12:00:00.000Z",
+  "caller": {
+    "id": "agent-1",
+    "type": "agent"
+  },
+  "tool": {
+    "name": "delete_resource"
+  },
+  "arguments": {
+    "resource_id": "vol-123"
+  },
+  "context": {
+    "environment": "staging"
+  }
+}

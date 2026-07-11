@@ -1,0 +1,15 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: allow-read-internal
+  name: Allow internal reads
+  defaultVerdict: BLOCK
+  rules:
+  - id: allow-internal-read
+    name: Allow internal data reads
+    priority: 100
+    match:
+      intents:
+      - data.read.internal
+    verdict: ALLOW
+    reason: Internal reads are permitted

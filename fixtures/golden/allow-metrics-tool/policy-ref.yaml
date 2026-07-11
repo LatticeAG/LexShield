@@ -1,0 +1,18 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: allow-metrics-tool
+  name: Allow metrics tools
+  defaultVerdict: BLOCK
+  rules:
+  - id: allow-metrics
+    name: Allow metrics emission
+    priority: 100
+    match:
+      tools:
+      - emit_metrics
+      - record_metric
+      intents:
+      - network.request.health
+    verdict: ALLOW
+    reason: Metrics tools are always allowed

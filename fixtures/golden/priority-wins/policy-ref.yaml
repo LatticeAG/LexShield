@@ -1,0 +1,21 @@
+rules: ../../../packs/baseline-deny/rules.yaml
+policy:
+  version: 1
+  id: priority-wins-fixture
+  name: Priority wins fixture policy
+  defaultVerdict: ALLOW
+  rules:
+    - id: low-priority-allow
+      name: Low priority allow
+      priority: 100
+      match:
+        tools: ["test_tool"]
+      verdict: ALLOW
+      reason: "Low priority rule"
+    - id: high-priority-block
+      name: High priority block
+      priority: 200
+      match:
+        tools: ["test_tool"]
+      verdict: BLOCK
+      reason: "High priority rule wins"

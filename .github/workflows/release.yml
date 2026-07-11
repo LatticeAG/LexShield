@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Sync Python workspace
+        run: uv sync
+
+      - name: Install Node dependencies
+        run: pnpm install
+
+      - name: Run Python tests
+        run: uv run pytest
+
+      - name: Run TypeScript tests
+        run: pnpm test
+
+      - name: Run golden parity tests
+        run: pnpm test:golden
+
+      - name: Validate policy packs
+        run: uv run lexshield-check-packs
+
+      - name: Build TypeScript SDK
+        run: pnpm --filter @latticeag/lexshield build
+
+      - name: Run v0.1 acceptance checklist
+        run: uv run python scripts/acceptance_v01.py
+
+      - name: Build Python wheels (validate only, no publish)
+        run: |
+          uv build --package lexshield --out-dir /tmp/dist
+          uv build --package lexshield-cli --out-dir /tmp/dist
+          ls -la /tmp/dist
+
+      - name: Verify npm pack (validate only, no publish)
+        run: |
+          cd packages/engine-ts
+          pnpm pack --pack-destination /tmp/dist
+          ls -la /tmp/dist
