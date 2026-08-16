@@ -70,3 +70,12 @@ Thumbs.db
 .hypothesis/
 .pytest_cache/
 vitest.config.ts.timestamp-*
+
+# LatticeAG internal docs - never public
+*SPEC*.md
+*BUILD-SPEC*.md
+*HANDOFF*.md
+*ROADMAP*.md
+*REVIEW*.md
+*WHAT-NEXT*.md
+AGENTS.md
