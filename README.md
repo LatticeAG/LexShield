@@ -28,7 +28,10 @@
   <a href="#why-lexshield">Why LexShield</a> ·
   <a href="#architecture">Architecture</a> ·
   <a href="#features">Features</a> ·
+  <a href="#configuration">Configuration</a> ·
   <a href="#monorepo-layout">Layout</a> ·
+  <a href="#acceptance">Testing</a> ·
+  <a href="#known-issues">Known Issues</a> ·
   <a href="#documentation">Docs</a>
 </p>
 
@@ -43,8 +46,9 @@ Built for AI safety teams and agent platform operators who need a defense-in-dep
 - **Default-deny security** - every tool call is blocked until a policy explicitly allows it. No trust-once, permit-forever footguns.
 - **Deterministic by default** - no API key required for core policy enforcement. Regex pattern matching and intent classification run locally, every time.
 - **Multi-verdict policy engine** - `ALLOW`, `BLOCK`, `CHALLENGE`, and `DEFER` give you graduated control, not binary pass/fail.
-- **Human-in-the-loop** - `CHALLENGE` verdicts queue for human approval. Agents pause, humans review, agents resume with signed webhooks.
+- **Human-in-the-loop** - `CHALLENGE` verdicts queue for human approval. Humans review via CLI/API; approvals are delivered to the agent through the local challenge store; webhook notifications are HMAC-signed.
 - **Cross-platform SDKs** - Python and TypeScript SDKs with golden parity. Same deterministic behavior, same policy files, same audit traces.
+- **Output plane (whole-value, non-streaming)** - After a tool or model produces a complete value, LexShield evaluates that emission before it leaves the agent boundary. Actions are `RELEASE`, `REDACT`, `REPLACE`, `DROP`, and `QUARANTINE`. Streaming token-by-token enforcement is not in v0.2.0.
 - **Audit-native** - every evaluation appends to `traces.ndjson` with verdict, matched rule, and intent classification. Production-ready observability without extra tooling.
 
 ### How LexShield is different
@@ -66,20 +70,24 @@ uv sync
 # 2. Scaffold config in a scratch directory
 mkdir /tmp/lexshield-demo && cd /tmp/lexshield-demo
 lexshield init --pack baseline-deny
+# -> writes lexshield.yaml, policy.yaml (4 rules), rules.yaml
 
 # 3. Validate policy (CI-friendly)
 lexshield check --strict
+# -> OK policy=.../policy.yaml (exit 0)
 
 # 4. Evaluate a tool call offline
 lexshield evaluate \
   --tool send_email \
-  --args '{"to":"user@example.com","body":"«redacted:AKIA…»"}' \
+  --args '{"to":"user@example.com","body":"key AKIAIOSFODNN7EXAMPLE"}' \
   --json
 # -> "decision": "BLOCK", "matchedRuleId": "block-secret-exposure"
 
 lexshield evaluate --tool health_check --args '{}' --json
 # -> "decision": "ALLOW", "matchedRuleId": "allow-health"
 ```
+
+All outputs above verified against `lexshield 0.2.0` with the `baseline-deny` pack.
 
 ### TypeScript evaluate
 
@@ -127,15 +135,15 @@ flowchart LR
 | **Default-deny YAML policies** | Priority rules, globs, tags, and safe expressions. No implicit allow. |
 | **Intent classification** | Deterministic tool maps + regex patterns; optional OpenAI-compatible LLM fallback for ambiguous calls. |
 | **Multi-verdict system** | `ALLOW`, `BLOCK`, `CHALLENGE`, `DEFER` with audit-friendly reasons for every verdict. |
-| **Policy packs** | `baseline-deny`, `pii-guard`, `change-window` -- drop-in policies for common guardrail scenarios. |
+| **Policy packs** | `baseline-deny`, `pii-guard`, `change-window` -- drop-in policies for common guardrail scenarios. `output-baseline` for the output plane. |
 
 ### SDK & CLI
 
 | Feature | Description |
 |---------|------------|
-| **Python SDK** | `Shield.evaluate`, `@shield.guard` decorator, `await_challenge`, trace sinks |
-| **TypeScript SDK** | `@latticeag/lexshield` with golden parity on all deterministic paths |
-| **CLI** | `init`, `check`, `evaluate`, `run`, `traces`, `challenge`, `packs`, shell completion |
+| **Python SDK** | `Shield.evaluate`, `@shield.guard`, `evaluate_output` / `guard_output`, `await_challenge`, trace sinks |
+| **TypeScript SDK** | `@latticeag/lexshield` with golden parity on deterministic paths; `evaluateOutput` / `guardOutput` |
+| **CLI** | `init`, `check`, `evaluate`, `output evaluate`, `run`, `traces`, `challenge`, `packs`, shell completion |
 | **Local API** | FastAPI server on `127.0.0.1:8787` -- evaluate, execute, traces, challenge resolve |
 
 ### Audit & Observability
@@ -146,6 +154,25 @@ flowchart LR
 | **Cross-engine golden parity** | Python and TypeScript engines tested against the same golden fixture suite |
 | **Framework adapters** | Community patterns for Vercel AI SDK, LangChain, and OpenAI Agents SDK |
 
+## Configuration
+
+The CLI loads `lexshield.yaml` from the current directory by default; override per-invocation:
+
+```bash
+lexshield --config ./lexshield.yaml check --strict
+lexshield run --port 8787   # local API on 127.0.0.1:8787
+```
+
+| Item | Description |
+|------|-------------|
+| `lexshield.yaml` | Engine config: policy path, taxonomy, trace sinks, challenge store |
+| `policy.yaml` | Priority-ordered rules (default-deny; `baseline-deny` ships 4 rules) |
+| `rules.yaml` | Intent classification rules and tool maps |
+| `packs/` | Built-in starting points: `baseline-deny`, `pii-guard`, `change-window`, `output-baseline` |
+| `lexshield run` | Serves the local FastAPI on `127.0.0.1:8787` (evaluate, execute, traces, challenge resolve) |
+
+Full authoring reference: [docs/policy.md](./docs/policy.md), [docs/output.md](./docs/output.md), [docs/cli.md](./docs/cli.md).
+
 ## Monorepo Layout
 
 ```text
@@ -154,15 +181,19 @@ lexshield/
 │   ├── engine-py/          # Python policy engine + classifiers
 │   ├── cli/                # lexshield Typer CLI
 │   └── engine-ts/          # @latticeag/lexshield (TypeScript)
-├── packs/                  # baseline-deny, pii-guard, change-window
+├── packs/                  # baseline-deny, pii-guard, change-window, output-baseline
 ├── fixtures/
-│   └── golden/             # Cross-engine regression scenarios
+│   ├── golden/             # Cross-engine regression scenarios (67 files)
+│   ├── output-golden/      # Output-plane regression scenarios (14 files)
+│   └── redteam/authz/      # Honest recorded outcomes (knownGap)
+├── schemas/                # policy, verdict, trace, tool-call-request JSON schemas
+├── taxonomy/               # builtin.yaml + output-findings.yaml intent catalog
 ├── examples/
 │   ├── python-block-exfil/       # BLOCK on AWS key in send_email
 │   ├── python-challenge-delete/  # CHALLENGE + CLI approve + execution
 │   └── ts-evaluate/              # TypeScript evaluate() demo
 ├── contrib/                # Community framework adapters
-├── docs/                   # policy.md, intents.md, sdk-python.md, sdk-typescript.md, cli.md, security.md
+├── docs/                   # policy.md, output.md, intents.md, sdk-python.md, sdk-typescript.md, cli.md, security.md
 ├── SPEC.md                 # Full architecture + policy language spec
 ├── LICENSE                 # MIT
 └── README.md               # This file
@@ -173,6 +204,7 @@ lexshield/
 | Doc | Topic |
 |-----|-------|
 | [docs/policy.md](./docs/policy.md) | Policy authoring language |
+| [docs/output.md](./docs/output.md) | Output plane (whole-value, non-streaming) |
 | [docs/intents.md](./docs/intents.md) | Intent catalog and taxonomy |
 | [docs/sdk-python.md](./docs/sdk-python.md) | Python SDK reference |
 | [docs/sdk-typescript.md](./docs/sdk-typescript.md) | TypeScript SDK reference |
@@ -183,11 +215,21 @@ lexshield/
 ## Acceptance
 
 ```bash
-# v0.1 acceptance suite (matches SPEC Appendix D)
+# v0.2 acceptance suite
 uv sync && uv run pytest && uv run lexshield-check-packs \
-  && pnpm install && pnpm test && pnpm test:golden \
-  && pnpm example:ts-evaluate
+  && pnpm install && pnpm test && pnpm test:golden && pnpm test:output-golden \
+  && uv run python scripts/acceptance_v02.py
 ```
+
+Measured on `lexshield 0.2.0`:
+
+| Suite | Result |
+|-------|--------|
+| `uv run pytest` | 246 passed |
+| `pnpm test` (engine-ts, 16 files) | 108 passed |
+| `pnpm test:golden` | 3 passed |
+| `pnpm test:output-golden` | 15 passed |
+| `uv run lexshield-check-packs` | 4 packs/policies OK |
 
 ## Development
 
@@ -200,12 +242,14 @@ uv run pytest
 pnpm install
 pnpm test
 pnpm test:golden
+pnpm test:output-golden
 
 # Policy packs
 uv run lexshield-check-packs
 
 # Full acceptance
 make acceptance   # scripts/acceptance_v01.py
+uv run python scripts/acceptance_v02.py
 ```
 
 CI runs on every push -- [.github/workflows/ci.yml](./.github/workflows/ci.yml). Tag `v*` triggers release validation.
@@ -214,7 +258,7 @@ CI runs on every push -- [.github/workflows/ci.yml](./.github/workflows/ci.yml).
 
 - **LLM classifier latency** - When the optional LLM classifier is enabled, evaluation latency increases by 500-2000ms depending on provider. Deterministic-only mode has no such overhead.
 - **Large policy trees** - Policy files with 100+ rules are validated and performant, but `lexshield check --strict` may take several seconds for very large rule sets. Break policies into focused packs where possible.
-- **Challenge expiry** - Orphaned challenges (submitted but never resolved) have no built-in TTL in v0.1. Clean up `.lexshield/challenges/` manually or wire a cron job.
+- **Challenge expiry** - Challenge TTL expiry is lazy; it runs on `list_open()`/`await_challenge` polling only. There is no background sweeper.
 
 ## License
 
