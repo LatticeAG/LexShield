@@ -144,7 +144,7 @@ flowchart LR
 | **Python SDK** | `Shield.evaluate`, `@shield.guard`, `evaluate_output` / `guard_output`, `await_challenge`, trace sinks |
 | **TypeScript SDK** | `@latticeag/lexshield` with golden parity on deterministic paths; `evaluateOutput` / `guardOutput` |
 | **CLI** | `init`, `check`, `evaluate`, `output evaluate`, `run`, `traces`, `challenge`, `packs`, shell completion |
-| **Local API** | FastAPI server on `127.0.0.1:8787` -- evaluate, execute, traces, challenge resolve |
+| **Local API** | FastAPI server on `127.0.0.1:8787` -- `/healthz`, `/readyz`, `/v1/shields/{id}/evaluate`, `/execute`, `/policy`, `/v1/traces`, `/v1/challenges` |
 
 ### Audit & Observability
 
@@ -169,9 +169,43 @@ lexshield run --port 8787   # local API on 127.0.0.1:8787
 | `policy.yaml` | Priority-ordered rules (default-deny; `baseline-deny` ships 4 rules) |
 | `rules.yaml` | Intent classification rules and tool maps |
 | `packs/` | Built-in starting points: `baseline-deny`, `pii-guard`, `change-window`, `output-baseline` |
-| `lexshield run` | Serves the local FastAPI on `127.0.0.1:8787` (evaluate, execute, traces, challenge resolve) |
+| `lexshield run` | Serves the local FastAPI on `127.0.0.1:8787` -- see [Local API routes](#local-api) |
 
 Full authoring reference: [docs/policy.md](./docs/policy.md), [docs/output.md](./docs/output.md), [docs/cli.md](./docs/cli.md).
+
+## Local API
+
+`lexshield run` serves the local FastAPI on `127.0.0.1:8787`:
+
+| Method | Route | Purpose |
+|--------|-------|---------|
+| `GET` | `/healthz` | Liveness probe |
+| `GET` | `/readyz` | Readiness probe (`ready` when a shield+policy is loaded) |
+| `POST` | `/v1/shields/{shield_id}/evaluate` | Verdict without executing the tool |
+| `POST` | `/v1/shields/{shield_id}/execute` | Evaluate, then forward to a configured upstream on `ALLOW` |
+| `GET` | `/v1/shields/{shield_id}/policy` | Active compiled policy |
+| `POST` | `/v1/shields/{shield_id}/policy/reload` | Hot-reload policy from disk |
+| `GET` | `/v1/traces` | Query audit traces (`decision`, `tool`, `intent`, `limit`, `offset`) |
+| `GET` | `/v1/challenges` | Open human-in-the-loop challenges |
+| `POST` | `/v1/challenges/{challenge_id}/resolve` | Resolve a challenge (`{"decision":"approve"\|"deny","actor":"..."}`) |
+
+`evaluate` and `execute` take a `ToolCallRequest` body -- `shieldId`, `caller` (`{id, type}`), `tool` (`{name}`), optional `arguments` and `context`:
+
+```bash
+curl -X POST http://127.0.0.1:8787/v1/shields/local/evaluate \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "shieldId": "local",
+    "caller": {"id": "agent-1", "type": "agent"},
+    "tool": {"name": "send_email"},
+    "arguments": {"to": "user@example.com", "body": "hello"},
+    "context": {"environment": "production"}
+  }'
+```
+
+A body without `shieldId`/`caller`/`tool.name` (e.g. `{"tool":"send_email","args":{}}`) returns `422`.
+
+All `/v1/*` routes accept `Authorization: Bearer <token>` when `LEXSHIELD_LOCAL_TOKEN` is set.
 
 ## Monorepo Layout
 
@@ -194,7 +228,6 @@ lexshield/
 │   └── ts-evaluate/              # TypeScript evaluate() demo
 ├── contrib/                # Community framework adapters
 ├── docs/                   # policy.md, output.md, intents.md, sdk-python.md, sdk-typescript.md, cli.md, security.md
-├── SPEC.md                 # Full architecture + policy language spec
 ├── LICENSE                 # MIT
 └── README.md               # This file
 ```

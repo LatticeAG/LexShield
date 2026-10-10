@@ -1,6 +1,6 @@
 # Policy Authoring
 
-Guide to writing LexShield YAML policies. See [SPEC §12](../SPEC.md#12-policy-language--engine) for the normative specification.
+Guide to writing LexShield YAML policies.
 
 ## Overview
 
@@ -111,8 +111,6 @@ expression: 'tags.change_ticket != ""'
 # Block HTTP to non-allowlisted hosts
 expression: '!(args.url startsWith "https://api.mycompany.com/")'
 ```
-
-See [SPEC §9B.4](../SPEC.md#9b4-expression-grammar-v01) for the full grammar.
 
 ## Challenge configuration
 

@@ -4,8 +4,8 @@ Shipped policy packs for v0.1. Each pack is a directory with:
 
 | File | Purpose |
 |------|---------|
-| `policy.yaml` | Allow/block/challenge rules (SPEC Appendix A) |
-| `rules.yaml` | Deterministic classifier: `tool_map` + `patterns` (Appendix A.4) |
+| `policy.yaml` | Allow/block/challenge rules |
+| `rules.yaml` | Deterministic classifier: `tool_map` + `patterns` |
 
 Apply a pack with:
 
@@ -41,4 +41,4 @@ Infra change-window policy. Allows production infra mutate/provision when `chang
 
 ## Normative source
 
-Full YAML is defined in [SPEC.md Appendix A](../SPEC.md#appendix-a--example-policy-packs).
+The pack format is documented in [docs/policy.md](../docs/policy.md).

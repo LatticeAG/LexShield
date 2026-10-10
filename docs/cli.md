@@ -1,6 +1,6 @@
 # CLI Reference
 
-Commands for the `lexshield` Typer CLI. See [SPEC §16](../SPEC.md#16-cli-surface).
+Commands for the `lexshield` Typer CLI.
 
 ## Installation
 
@@ -72,7 +72,7 @@ uv run lexshield-check-packs
 
 ## `lexshield run`
 
-Start the local FastAPI server (`/evaluate`, `/execute`, `/traces`, `/challenges`).
+Start the local FastAPI server on `127.0.0.1:8787`. Routes: `GET /healthz`, `GET /readyz`, `POST /v1/shields/{id}/evaluate`, `POST /v1/shields/{id}/execute`, `GET /v1/shields/{id}/policy`, `POST /v1/shields/{id}/policy/reload`, `GET /v1/traces`, `GET /v1/challenges`, `POST /v1/challenges/{id}/resolve`. See [Local API](../README.md#local-api) for request shapes.
 
 ```bash
 lexshield run
@@ -111,7 +111,8 @@ lexshield -c examples/python-challenge-delete/lexshield.yaml evaluate \
   --json
 
 # Evaluate a full ToolCallRequest from stdin
-echo '{"tool":{"name":"health_check"},"arguments":{}}' \
+# (shieldId is filled in from the loaded config; caller + tool.name are required)
+echo '{"caller":{"id":"agent-1","type":"agent"},"tool":{"name":"health_check"},"arguments":{}}' \
   | lexshield evaluate --stdin --json
 
 # Override policy paths for CI

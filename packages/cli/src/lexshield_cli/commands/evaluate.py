@@ -222,7 +222,7 @@ def evaluate(
         lexshield -c ./lexshield.yaml evaluate --tool delete_resource \\
           --args '{"resource_id":"db-1"}' --environment production --json
 
-        echo '{"tool":{"name":"health_check"},"arguments":{}}' | lexshield evaluate --stdin --json
+        echo '{"caller":{"id":"agent-1","type":"agent"},"tool":{"name":"health_check"},"arguments":{}}' | lexshield evaluate --stdin --json
     """
     resolved = resolve_command_config(ctx, config)
     try:

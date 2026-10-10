@@ -1,6 +1,6 @@
 # Security Model
 
-Threat model, trust boundaries, and honest limits. See [SPEC §23](../SPEC.md#23-security--threat-model).
+Threat model, trust boundaries, and honest limits.
 
 ## Trust boundaries
 
