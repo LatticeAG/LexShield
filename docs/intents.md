@@ -1,6 +1,6 @@
 # Intent Catalog
 
-Built-in intent taxonomy for LexShield v0.1. See [SPEC §10](../SPEC.md#10-intent-taxonomy) and [Appendix B](../SPEC.md#appendix-b--built-in-intent-catalog-v01).
+Built-in intent taxonomy for LexShield v0.1.
 
 ## Overview
 

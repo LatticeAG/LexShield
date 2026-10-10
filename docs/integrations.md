@@ -10,7 +10,7 @@ LexShield core ships Python and TypeScript SDKs with `Shield.evaluate` and `Shie
 | `shield.evaluate` before dispatch | Framework forwards tool calls to a queue or client |
 | Contrib adapter | You want a copy-paste pattern for AI SDK, LangChain, or OpenAI Agents |
 
-All paths evaluate policy **before** tool side effects. See [SPEC §14.3](../SPEC.md#143-framework-adapters).
+All paths evaluate policy **before** tool side effects.
 
 ## Available contrib patterns
 

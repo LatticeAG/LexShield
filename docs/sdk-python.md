@@ -1,6 +1,6 @@
 # Python SDK
 
-Reference for the `lexshield` package. See [SPEC §15.1](../SPEC.md#151-python-primary).
+Reference for the `lexshield` package.
 
 ## Installation
 
@@ -203,12 +203,21 @@ Start the local server:
 lexshield run
 ```
 
-Endpoints (see [SPEC §17](../SPEC.md#17-local-api--proxy)):
+Endpoints:
 
-- `POST /v1/shields/{id}/evaluate`
-- `POST /v1/shields/{id}/execute`
-- `GET /v1/challenges`
-- `POST /v1/challenges/{id}/resolve`
+| Method | Route |
+|--------|-------|
+| `GET` | `/healthz` |
+| `GET` | `/readyz` |
+| `POST` | `/v1/shields/{id}/evaluate` |
+| `POST` | `/v1/shields/{id}/execute` |
+| `GET` | `/v1/shields/{id}/policy` |
+| `POST` | `/v1/shields/{id}/policy/reload` |
+| `GET` | `/v1/traces` |
+| `GET` | `/v1/challenges` |
+| `POST` | `/v1/challenges/{id}/resolve` |
+
+`evaluate`/`execute` take a `ToolCallRequest` body: `shieldId`, `caller` (`{id, type}`), `tool` (`{name}`), optional `arguments`, `context`, `id`. Anything else — e.g. `{"tool":"send_email","args":{}}` — returns `422`.
 
 Optional auth: set `LEXSHIELD_LOCAL_TOKEN` and pass `Authorization: Bearer ...`.
 

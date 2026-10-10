@@ -1,6 +1,6 @@
 # TypeScript SDK
 
-Reference for `@latticeag/lexshield`. See [SPEC §15.2](../SPEC.md#152-typescript).
+Reference for `@latticeag/lexshield`.
 
 ## Installation
 
