@@ -73,6 +73,7 @@ python -m pip install .
 
 # 2. Scaffold config in a scratch directory
 mkdir -p /tmp/lexshield-demo && cd /tmp/lexshield-demo
+DEMO="$PWD"
 lexshield init --pack baseline-deny
 # -> writes lexshield.yaml, policy.yaml (4 rules), rules.yaml
 
@@ -107,6 +108,7 @@ cd "$REPO"
 uv sync
 uv run lexshield --help
 # From another directory, point uv at the checkout:
+cd "$DEMO"
 uv run --project "$REPO" lexshield check --strict
 ```
 
