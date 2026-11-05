@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import subprocess
 import sys
+from contextlib import redirect_stdout
 from pathlib import Path
 
 from lexshield import Shield
@@ -63,9 +65,9 @@ def approve_via_cli(challenge_id: str) -> None:
     result = subprocess.run(command, check=False, capture_output=True, text=True)
     if result.stdout:
         print(result.stdout.rstrip())
+    if result.stderr:
+        print(result.stderr.rstrip(), file=sys.stderr)
     if result.returncode != 0:
-        if result.stderr:
-            print(result.stderr.rstrip(), file=sys.stderr)
         raise SystemExit(result.returncode)
 
 
@@ -110,7 +112,7 @@ async def execute_with_cli_approve(
     return await task
 
 
-async def run_full_demo() -> None:
+async def run_full_demo() -> dict:
     """End-to-end: CLI approve during await_challenge, then execute."""
     print("=== CHALLENGE → CLI approve → execute ===")
     result = await execute_with_cli_approve(
@@ -120,9 +122,10 @@ async def run_full_demo() -> None:
     print()
     print("ALLOW after approval:")
     print(f"  {result}")
+    return result
 
 
-async def main() -> None:
+async def main() -> dict:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--challenge-only",
@@ -139,10 +142,13 @@ async def main() -> None:
         print("Approve manually, then run the full demo:")
         print(f"  lexshield challenge approve {challenge_id} -c {EXAMPLE_DIR}")
         print("  uv run --project ../.. python main.py")
-        return
+        return {"decision": "CHALLENGE", "challenge_id": challenge_id}
 
-    await run_full_demo()
+    result = await run_full_demo()
+    return {"decision": "ALLOW", "result": result}
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    with redirect_stdout(sys.stderr):
+        output = asyncio.run(main())
+    print(json.dumps(output))
