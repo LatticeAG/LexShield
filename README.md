@@ -66,6 +66,7 @@ uv is not required:
 # 1. Clone and install
 git clone https://github.com/LatticeAG/LexShield.git
 cd LexShield
+REPO="$PWD"
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install .
@@ -92,9 +93,31 @@ lexshield evaluate --tool health_check --args '{}' --json
 
 The examples use the `baseline-deny` pack.
 
+The activated environment puts `lexshield` on PATH, so it works in any
+directory. To use it in a new shell, activate `"$REPO/.venv/bin/activate"`
+again (set `REPO` to the absolute path of your checkout first).
+
+Alternatively, install [uv](https://docs.astral.sh/uv/getting-started/installation/)
+and run the CLI directly from the checkout:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+cd "$REPO"
+uv sync
+uv run lexshield --help
+# From another directory, point uv at the checkout:
+uv run --project "$REPO" lexshield check --strict
+```
+
+The last command checks the configuration in the current directory. The
+development and acceptance commands below use uv; the installed CLI does not
+need it.
+
 ### TypeScript evaluate
 
 ```bash
+cd "$REPO"
 pnpm install
 pnpm --filter @latticeag/lexshield build
 pnpm example:ts-evaluate
@@ -103,9 +126,12 @@ pnpm example:ts-evaluate
 ### Challenge flow (human approval)
 
 ```bash
+cd "$REPO"
 cd examples/python-challenge-delete
-uv run --project ../.. python main.py
+python main.py
 # end-to-end: CHALLENGE -> CLI approve -> guarded delete succeeds
+# Or without activating the pip environment:
+uv run --project "$REPO" python main.py
 ```
 
 ## Architecture
