@@ -59,16 +59,20 @@ Built for AI safety teams and agent platform operators who need a defense-in-dep
 
 ## Quick Start (5 minutes, deterministic-only)
 
-No API key required.
+No API key required. On a fresh Ubuntu image, use Python 3.11 or newer and
+Git to clone the repository and install the CLI into a virtual environment;
+uv is not required:
 
 ```bash
 # 1. Clone and install
 git clone https://github.com/LatticeAG/LexShield.git
 cd LexShield
-uv sync
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install .
 
 # 2. Scaffold config in a scratch directory
-mkdir /tmp/lexshield-demo && cd /tmp/lexshield-demo
+mkdir -p /tmp/lexshield-demo && cd /tmp/lexshield-demo
 lexshield init --pack baseline-deny
 # -> writes lexshield.yaml, policy.yaml (4 rules), rules.yaml
 
