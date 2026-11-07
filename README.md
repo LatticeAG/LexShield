@@ -241,7 +241,9 @@ lexshield/
 
 ## Acceptance
 
-Run the Python and TypeScript checks and the tracked acceptance script from the repository root:
+The project specification lives outside this public repository by policy. For the
+checks shipped here, use the tracked [v0.1 acceptance script](./scripts/acceptance_v01.py)
+and the Python and TypeScript test suites from the repository root:
 
 ```bash
 uv sync && uv run pytest && uv run lexshield-check-packs
