@@ -22,6 +22,11 @@ Expected flow:
 2. `lexshield challenge approve <challenge_id> -c .` (invoked automatically by the demo)
 3. `ALLOW after approval: {'status': 'deleted', ...}`
 
+Progress messages and CLI instructions go to stderr. Stdout contains one JSON
+object: `{"decision":"ALLOW","result":{"status":"deleted","resource_id":"db-primary-replica"}}`.
+With `--challenge-only`, stdout contains the `CHALLENGE` decision and
+`challenge_id` instead, so either mode can be piped to a JSON parser.
+
 ## Run (step-by-step)
 
 Trigger CHALLENGE only, then run the full demo after manual approval:

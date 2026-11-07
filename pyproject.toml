@@ -7,8 +7,32 @@ license = { text = "MIT" }
 requires-python = ">=3.11"
 authors = [{ name = "LatticeAG" }]
 dependencies = [
-    "lexshield-cli",
+    "pydantic>=2",
+    "pyyaml",
+    "httpx",
+    "fastapi",
+    "uvicorn>=0.30",
+    "ulid-py",
+    "typer>=0.12",
+    "rich>=13",
 ]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project.scripts]
+lexshield = "lexshield_cli.main:app"
+lexshield-check-packs = "lexshield_cli.scripts.check_packs:main"
+
+[tool.setuptools.package-dir]
+lexshield = "packages/engine-py/src/lexshield"
+lexshield_cli = "packages/cli/src/lexshield_cli"
+
+[tool.setuptools.packages.find]
+where = ["packages/engine-py/src", "packages/cli/src"]
+include = ["lexshield", "lexshield.*", "lexshield_cli", "lexshield_cli.*"]
+namespaces = false
 
 [tool.uv.sources]
 lexshield-cli = { workspace = true }
@@ -21,6 +45,7 @@ members = [
 
 [dependency-groups]
 dev = [
+    "lexshield-cli",
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
     "ruff>=0.8",
